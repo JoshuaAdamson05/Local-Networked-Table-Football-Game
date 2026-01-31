@@ -6,12 +6,12 @@ public class RodSpawner : NetworkBehaviour
     [SerializeField] private NetworkObject _blueRodPrefab;
     [SerializeField] private NetworkObject _redRodPrefab;
 
-    private void Start()
+    public override void OnNetworkSpawn()
     {
         NetworkManager.Singleton.OnClientConnectedCallback += OnClientConnected;
     }
 
-    private void OnDestroy()
+    public override void OnNetworkDespawn()
     {
         if (NetworkManager.Singleton == null) return;
 
