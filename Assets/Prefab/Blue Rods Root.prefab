@@ -1199,7 +1199,7 @@ MonoBehaviour:
   RotationMaxInterpolationTime: 0.1
   ScaleLerpSmoothing: 1
   ScaleMaxInterpolationTime: 0.1
-  AuthorityMode: 1
+  AuthorityMode: 0
   TickSyncChildren: 0
   UseUnreliableDeltas: 0
   SyncPositionX: 1
@@ -1278,42 +1278,19 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::RodInputManager
   ShowTopMostFoldoutHeaderGroup: 1
-  moveAction:
+  _moveAction:
     m_Name: Move
     m_Type: 0
     m_ExpectedControlType: 
-    m_Id: 8053be19-ea7d-43e3-9400-e95c23a42143
+    m_Id: b864a52a-8221-400f-9b38-ec89e20ecc60
     m_Processors: 
     m_Interactions: 
-    m_SingletonActionBindings:
-    - m_Name: 1D Axis
-      m_Id: 59abd573-ce88-4ce9-a0ae-e5178512bb6e
-      m_Path: 1DAxis
-      m_Interactions: 
-      m_Processors: 
-      m_Groups: 
-      m_Action: Move
-      m_Flags: 4
-    - m_Name: negative
-      m_Id: a444eef9-5e60-4f99-9333-fff520fcf571
-      m_Path: <Keyboard>/leftArrow
-      m_Interactions: 
-      m_Processors: 
-      m_Groups: 
-      m_Action: Move
-      m_Flags: 8
-    - m_Name: positive
-      m_Id: a5ccdc59-5d27-4e3f-819f-a17269490544
-      m_Path: <Keyboard>/rightArrow
-      m_Interactions: 
-      m_Processors: 
-      m_Groups: 
-      m_Action: Move
-      m_Flags: 8
+    m_SingletonActionBindings: []
     m_Flags: 0
-  rb: {fileID: 5989143169127302633}
-  moveSpeed: 1.5
-  rodBounds: {fileID: 2451566987256780557}
+  _rb: {fileID: 0}
+  _moveSpeed: 0
+  _rodBounds: {fileID: 0}
+  _networkTransform: {fileID: 0}
 --- !u!1 &7852875568521782785
 GameObject:
   m_ObjectHideFlags: 0
