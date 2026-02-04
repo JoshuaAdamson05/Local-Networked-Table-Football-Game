@@ -18,7 +18,6 @@ public class RodInputManager : NetworkBehaviour
 
     public override void OnNetworkSpawn()
     {
-        _rb.gravityScale = 0f;        
         _hasMoveAuthority = _serverAuthoritative ? IsServer : IsOwner;
 
         if (IsOwner) _moveAction.Enable();
@@ -83,15 +82,17 @@ public class RodInputManager : NetworkBehaviour
 
     private void ApplyPlayerMovement(float minX, float maxX, float clampedX, float moveValue)
     {
-        float desiredVelocityX = moveValue * _moveSpeed;
+        float deltaPosition = moveValue * _moveSpeed * Time.fixedDeltaTime;
         bool atMinX = Mathf.Abs(clampedX - minX) < 0.0001f;
         bool atMaxX = Mathf.Abs(clampedX - maxX) < 0.0001f;
 
-        if ((atMinX && desiredVelocityX < 0) || (atMaxX && desiredVelocityX > 0))
+        if ((atMinX && deltaPosition < 0) || (atMaxX && deltaPosition > 0))
         {
-            desiredVelocityX = 0f;
+            deltaPosition = 0f;
         }
 
-        _rb.linearVelocityX = desiredVelocityX;
+        Vector2 newPos = _rb.position;
+        newPos.x += deltaPosition;
+        _rb.MovePosition(newPos);
     }
 }
