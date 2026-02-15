@@ -6,6 +6,45 @@ public class GoalManager : NetworkBehaviour
     [SerializeField] private CircleCollider2D _ballBounds;
     private BoxCollider2D _clientGoalCollider;
     private BoxCollider2D _hostGoalCollider;
+    private ushort _nextGoalID;
+
+    public NetworkList<GoalEvent> GoalEvents { get; private set; }
+
+    private void Awake()
+    {
+        GoalEvents = new NetworkList<GoalEvent>();
+    }
+
+    private void RegisterGoal(TeamEnums scoringTeam)
+    {
+        GoalEvent newGoal = new GoalEvent
+        {
+            GoalID = _nextGoalID++,
+            ScoringTeam = scoringTeam
+        };
+        GoalEvents.Add(newGoal);
+
+        const int maxGoalsToKeep = 1;
+        if (GoalEvents.Count > maxGoalsToKeep)
+            GoalEvents.RemoveAt(0);
+    }
+
+    private void OnGoalEventsChanged(NetworkListEvent<GoalEvent> change)
+    {
+        if (change.Type == NetworkListEvent<GoalEvent>.EventType.Add)
+        {
+            GoalEvent newGoal = change.Value;
+            GoalEventBus.RaiseGoalScored(newGoal);
+        }
+    }
+
+    public override void OnNetworkDespawn()
+    {
+        if (IsClient)
+        {
+            GoalEvents.OnListChanged -= OnGoalEventsChanged;
+        }
+    }
 
     public override void OnNetworkSpawn()
     {
@@ -30,6 +69,11 @@ public class GoalManager : NetworkBehaviour
                 return;
             }
         }
+
+        if (IsClient)
+        {
+            GoalEvents.OnListChanged += OnGoalEventsChanged;
+        }
     }
 
     private void FixedUpdate()
@@ -38,10 +82,12 @@ public class GoalManager : NetworkBehaviour
 
         if (hasHostScoredGoal())
         {
+            RegisterGoal(TeamEnums.Blue);
             Debug.Log("Host scored a goal!");
         }
         else if (hasClientScoredGoal())
         {
+            RegisterGoal(TeamEnums.Red);
             Debug.Log("Client scored a goal!");
         }
     }

@@ -16,7 +16,6 @@ public class FootballManager : NetworkBehaviour
         if (IsServer)
         {
             Debug.Log("FootballManager spawned on the server.");
-            NetworkManager.Singleton.OnClientConnectedCallback += OnClientConnected;
         }
         else
         {
@@ -41,12 +40,6 @@ public class FootballManager : NetworkBehaviour
         }
     }
 
-    public override void OnNetworkDespawn()
-    {
-        if (NetworkManager.Singleton == null) return;
-        NetworkManager.Singleton.OnClientConnectedCallback -= OnClientConnected;
-    }
-
     private void FixedUpdate()
     {
         if (!IsServer) return;
@@ -59,15 +52,6 @@ public class FootballManager : NetworkBehaviour
         _lastVelocity = _footballRb.linearVelocity;
 
         ReflectBallAtPitchBounds();
-    }
-
-    public void OnClientConnected(ulong clientID)
-    {
-        if (!IsServer) return;
-        if (NetworkManager.Singleton.ConnectedClientsIds.Count == 2)
-        {
-            _footballRb.linearVelocity = RandomiseKickOffDirection() * _footballSpeed;
-        }
     }
 
     public void OnCollisionEnter2D(Collision2D collision)
@@ -119,9 +103,18 @@ public class FootballManager : NetworkBehaviour
         }
     }
 
-    private Vector2 RandomiseKickOffDirection()
+    public void ResetFootballPosition(Vector2 position)
     {
-        float sign = Random.value < 0.5f ? -1f : 1f;
-        return new Vector2(0, sign);
+        if (!IsServer) return;
+        if (_footballRb == null) return;
+        _footballRb.position = position;
+        _footballRb.linearVelocity = Vector2.zero;
+    }
+
+    public void SetVelocity(Vector2 direction)
+    {
+        if (!IsServer) return;
+        if (_footballRb == null) return;
+        _footballRb.linearVelocity = direction.normalized * _footballSpeed;
     }
 }
