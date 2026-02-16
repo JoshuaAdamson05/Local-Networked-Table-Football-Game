@@ -4,8 +4,6 @@ using UnityEngine;
 public class KickOffManager : NetworkBehaviour
 {
     [SerializeField] private FootballManager _footballManager;
-    private Rigidbody2D _redRodsRb;
-    private Rigidbody2D _blueRodsRb;
 
     private Vector2 RandomiseKickOffDirection()
     {
