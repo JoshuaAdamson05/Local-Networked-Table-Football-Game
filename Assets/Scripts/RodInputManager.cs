@@ -38,6 +38,16 @@ public class RodInputManager : NetworkBehaviour
         {
             Debug.LogError("RodBounds is not assigned. Please assign a BoxCollider2D to rodBounds.");
         }
+
+        if (_rb == null)
+        {
+            Debug.LogError("Rigidbody2D is not assigned. Please assign a Rigidbody2D to rb.");
+        }
+
+        if (_networkTransform == null)
+        {
+            Debug.LogError("NetworkTransform is not assigned. Please assign a NetworkTransform component to networkTransform.");
+        }
     }
 
     public override void OnNetworkDespawn()
@@ -49,7 +59,7 @@ public class RodInputManager : NetworkBehaviour
     void Update()
     {  
         if (!IsOwner) return;
-        _moveValue = _moveAction.ReadValue<float>();
+        _moveValue = MatchStateManager.Instance.CurrentMatchState.Value == MatchState.InPlay ? _moveAction.ReadValue<float>() : 0f;
         if (_serverAuthoritative)
         {
             SubmitMoveRequestServerRpc(_moveValue);
@@ -66,6 +76,8 @@ public class RodInputManager : NetworkBehaviour
     {
         if (!_hasMoveAuthority) return;
         if (_pitchBounds == null || _rodBounds == null) return;
+        if (_rb == null) return;
+        if (MatchStateManager.Instance.CurrentMatchState.Value != MatchState.InPlay) return;
         float moveValue = _serverAuthoritative ? _serverMoveValue : _moveValue;
         ClampPlayerPosition(out float clampedX, out float minX, out float maxX);
         ApplyPlayerMovement(minX, maxX, clampedX, moveValue);
@@ -94,5 +106,27 @@ public class RodInputManager : NetworkBehaviour
         Vector2 newPos = _rb.position;
         newPos.x += deltaPosition;
         _rb.MovePosition(newPos);
+    }
+
+    [ClientRpc]
+    private void ResetRodClientRpc()
+    {
+        if (_rb == null) return;
+        _rb.MovePosition(Vector2.zero);
+    }
+
+    public void ResetRodPosition()
+    {
+        if (_rb == null) return;
+        if (!IsServer) return;
+
+        if (_serverAuthoritative)
+        {
+            _rb.MovePosition(Vector2.zero);
+        }
+        else
+        {
+            ResetRodClientRpc();
+        }
     }
 }

@@ -4,6 +4,12 @@ using UnityEngine;
 public class KickOffManager : NetworkBehaviour
 {
     [SerializeField] private FootballManager _footballManager;
+    private int _lastProcessedSetupKickOffID = -1;
+    private int _lastProcessedKickOffID = -1;
+    private bool _wasBlueRodsAssigned = false;
+    private bool _wasRedRodsAssigned = false;
+    private RodInputManager _redRodManager;
+    private RodInputManager _blueRodManager;
 
     private Vector2 RandomiseKickOffDirection()
     {
@@ -11,12 +17,48 @@ public class KickOffManager : NetworkBehaviour
         return new Vector2(0, sign);
     }
 
+    private void Update()
+    {
+        if (!IsServer) return;
+
+        if (!_wasRedRodsAssigned)
+        {
+            _redRodManager = GameObject.FindGameObjectWithTag("RedRods")?.GetComponent<RodInputManager>();
+            if (_redRodManager != null)
+            {
+                _wasRedRodsAssigned = true;
+            }
+        }
+
+        if (!_wasBlueRodsAssigned)
+        {
+            _blueRodManager = GameObject.FindGameObjectWithTag("BlueRods")?.GetComponent<RodInputManager>();
+            if (_blueRodManager != null)
+            {
+                _wasBlueRodsAssigned = true;
+            }
+        }
+    }
+
     public override void OnNetworkSpawn()
     {
         if (IsServer)
         {
-            NetworkManager.Singleton.OnClientConnectedCallback += OnClientConnected;
-            GoalEventBus.OnGoalScored += OnGoalScored;
+            SetUpKickOffEventBus.OnSetUpKickOff += OnSetUpKickOff;
+            KickOffEventBus.OnKickOff += OnKickOff;
+
+            MatchStateManager matchStateManager = MatchStateManager.Instance;
+            if (matchStateManager != null && matchStateManager.SetUpKickOffEvents != null && matchStateManager.SetUpKickOffEvents.Count > 0)
+            {
+                SetUpKickOffEvent lastKickOffEvent = matchStateManager.SetUpKickOffEvents[matchStateManager.SetUpKickOffEvents.Count - 1];
+                OnSetUpKickOff(lastKickOffEvent);
+            }
+
+            if (matchStateManager != null && matchStateManager.KickOffEvents != null && matchStateManager.KickOffEvents.Count > 0)
+            {
+                KickOffEvent lastKickOffEvent = matchStateManager.KickOffEvents[matchStateManager.KickOffEvents.Count - 1];
+                OnKickOff(lastKickOffEvent);
+            }
 
             if (_footballManager == null)
             {
@@ -25,31 +67,41 @@ public class KickOffManager : NetworkBehaviour
         }
     }
 
-    public void OnClientConnected(ulong clientID)
+    public override void OnNetworkDespawn()
     {
-        if (!IsServer) return;
-        if (_footballManager == null) return;
-
-        if (NetworkManager.Singleton.ConnectedClientsIds.Count == 2)
+        if (IsServer)
         {
-            Vector2 kickOffDirection = RandomiseKickOffDirection();
-            _footballManager.SetVelocity(kickOffDirection);     
+            SetUpKickOffEventBus.OnSetUpKickOff -= OnSetUpKickOff;
+            KickOffEventBus.OnKickOff -= OnKickOff;
         }
     }
 
-    public override void OnNetworkDespawn()
-    {
-        if (NetworkManager.Singleton == null) return;
-        NetworkManager.Singleton.OnClientConnectedCallback -= OnClientConnected;
-        GoalEventBus.OnGoalScored -= OnGoalScored;
-    }
-
-    private void OnGoalScored(GoalEvent goal)
+    private void OnSetUpKickOff(SetUpKickOffEvent setUpKickOff)
     {
         if (!IsServer) return;
         if (_footballManager == null) return;
+        if (_blueRodManager == null || _redRodManager == null) return;
+        if (setUpKickOff.KickOffID <= _lastProcessedSetupKickOffID) return;
+        _lastProcessedSetupKickOffID = setUpKickOff.KickOffID;   
+        _footballManager.SetVelocity(Vector2.zero);
         _footballManager.ResetFootballPosition(Vector2.zero);
-        Vector2 kickOffDirection = goal.ScoringTeam == TeamEnums.Red ? Vector2.down : Vector2.up;
+        _redRodManager.ResetRodPosition();
+        _blueRodManager.ResetRodPosition();
+    }
+
+    private void OnKickOff(KickOffEvent kickOff)
+    {
+        if (!IsServer) return;
+        if (_footballManager == null) return;
+        if (kickOff.KickOffID <= _lastProcessedKickOffID) return;
+        _lastProcessedKickOffID = kickOff.KickOffID;
+
+        Vector2 kickOffDirection = RandomiseKickOffDirection();
+        if (kickOff.KickingOffTeam != TeamEnums.None)
+        {
+            kickOffDirection = kickOff.KickingOffTeam == TeamEnums.Red ? Vector2.up : Vector2.down;
+        }    
+        
         _footballManager.SetVelocity(kickOffDirection);
     }
 }

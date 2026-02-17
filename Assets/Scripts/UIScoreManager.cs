@@ -6,6 +6,7 @@ public class UIScoreManager : NetworkBehaviour
 {
     [SerializeField] private TextMeshProUGUI _redTeamScoreText;
     [SerializeField] private TextMeshProUGUI _blueTeamScoreText;
+    private int _lastProcessedGoalID = -1;
 
     private NetworkVariable<int> _redTeamScore = new NetworkVariable<int>
         (0, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Server);
@@ -54,7 +55,6 @@ public class UIScoreManager : NetworkBehaviour
         if (_redTeamScoreText == null)
             return;
 
-        _redTeamScore.Value = newValue;
         _redTeamScoreText.text = newValue.ToString();
     }
 
@@ -63,13 +63,15 @@ public class UIScoreManager : NetworkBehaviour
         if (_blueTeamScoreText == null)
             return;
 
-        _blueTeamScore.Value = newValue;
         _blueTeamScoreText.text = newValue.ToString();
     }
 
     private void OnGoalScored(GoalEvent goal)
     {
         if (!IsServer) return;
+        if (goal.GoalID <= _lastProcessedGoalID) return;
+
+        _lastProcessedGoalID = goal.GoalID;
 
         if (goal.ScoringTeam == TeamEnums.Red)
         {

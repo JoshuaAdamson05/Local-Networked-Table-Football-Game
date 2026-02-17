@@ -24,7 +24,7 @@ public class GoalManager : NetworkBehaviour
         };
         GoalEvents.Add(newGoal);
 
-        const int maxGoalsToKeep = 1;
+        const int maxGoalsToKeep = 2;
         if (GoalEvents.Count > maxGoalsToKeep)
             GoalEvents.RemoveAt(0);
     }
@@ -79,6 +79,7 @@ public class GoalManager : NetworkBehaviour
     private void FixedUpdate()
     {
         if (!IsServer) return;
+        if (MatchStateManager.Instance.CurrentMatchState.Value != MatchState.InPlay) return;
 
         if (hasHostScoredGoal())
         {
