@@ -6,20 +6,13 @@ public class UIScoreManager : NetworkBehaviour
 {
     [SerializeField] private TextMeshProUGUI _redTeamScoreText;
     [SerializeField] private TextMeshProUGUI _blueTeamScoreText;
-    private int _lastProcessedGoalID = -1;
-
-    private NetworkVariable<int> _redTeamScore = new NetworkVariable<int>
-        (0, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Server);
-    private NetworkVariable<int> _blueTeamScore = new NetworkVariable<int>
-        (0, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Server);
-
 
     public override void OnNetworkSpawn()
     {
         if (IsClient)
         {
-            _redTeamScore.OnValueChanged += OnRedTeamGoal;
-            _blueTeamScore.OnValueChanged += OnBlueTeamGoal;
+            ScoreManager.Instance._redTeamScore.OnValueChanged += OnRedTeamGoal;
+            ScoreManager.Instance._blueTeamScore.OnValueChanged += OnBlueTeamGoal;
 
             if (_redTeamScoreText == null)
             {
@@ -30,23 +23,14 @@ public class UIScoreManager : NetworkBehaviour
                 Debug.LogError("Blue Team Score Text is not assigned. Please assign a TextMeshProUGUI component to blueTeamScoreText.");
             }
         }
-
-        if (IsServer)
-        {
-            GoalEventBus.OnGoalScored += OnGoalScored;
-        }
     }
 
     public override void OnNetworkDespawn()
     {
         if (IsClient)
         {
-            _redTeamScore.OnValueChanged -= OnRedTeamGoal;
-            _blueTeamScore.OnValueChanged -= OnBlueTeamGoal;
-        }
-        if (IsServer)
-        {
-            GoalEventBus.OnGoalScored -= OnGoalScored;
+            ScoreManager.Instance._redTeamScore.OnValueChanged -= OnRedTeamGoal;
+            ScoreManager.Instance._blueTeamScore.OnValueChanged -= OnBlueTeamGoal;
         }
     }
 
@@ -64,22 +48,5 @@ public class UIScoreManager : NetworkBehaviour
             return;
 
         _blueTeamScoreText.text = newValue.ToString();
-    }
-
-    private void OnGoalScored(GoalEvent goal)
-    {
-        if (!IsServer) return;
-        if (goal.GoalID <= _lastProcessedGoalID) return;
-
-        _lastProcessedGoalID = goal.GoalID;
-
-        if (goal.ScoringTeam == TeamEnums.Red)
-        {
-            _redTeamScore.Value++;
-        }
-        else if (goal.ScoringTeam == TeamEnums.Blue)
-        {
-            _blueTeamScore.Value++;
-        }
     }
 }

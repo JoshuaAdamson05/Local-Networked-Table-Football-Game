@@ -4,10 +4,10 @@ using UnityEngine;
 
 public struct SetUpKickOffEvent : IEquatable<SetUpKickOffEvent>, INetworkSerializable
 {
-    public ushort KickOffID;
+    public ushort SetUpKickOffID;
     public bool Equals(SetUpKickOffEvent other)
     {
-        return KickOffID == other.KickOffID;
+        return SetUpKickOffID == other.SetUpKickOffID;
     }
     public override bool Equals(object obj)
     {
@@ -15,10 +15,10 @@ public struct SetUpKickOffEvent : IEquatable<SetUpKickOffEvent>, INetworkSeriali
     }
     public override int GetHashCode()
     {
-        return KickOffID.GetHashCode();
+        return SetUpKickOffID.GetHashCode();
     }
     public void NetworkSerialize<T>(BufferSerializer<T> serializer) where T : IReaderWriter
     {
-        serializer.SerializeValue(ref KickOffID);
+        serializer.SerializeValue(ref SetUpKickOffID);
     }
 }

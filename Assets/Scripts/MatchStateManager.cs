@@ -7,6 +7,7 @@ public enum MatchState
     InPlay,
     GoalScored,
     KickOff,
+    GameOver
 }
 
 public class MatchStateManager : NetworkBehaviour
@@ -16,7 +17,7 @@ public class MatchStateManager : NetworkBehaviour
     private int _lastProcessedGoalID = -1;
     private ushort _nextSetupKickOffID;
     private ushort _nextKickOffID;
-    private TeamEnums _lastKickingOffTeam;
+    private TeamEnums _lastKickingOffTeam = TeamEnums.None;
 
     public static MatchStateManager Instance { get; private set; }
     public NetworkVariable<MatchState> CurrentMatchState = new NetworkVariable<MatchState>
@@ -49,7 +50,7 @@ public class MatchStateManager : NetworkBehaviour
             Debug.Log($"Current Match State : {CurrentMatchState.ToString()}");
         }
 
-        if (IsClient && !IsServer)
+        if (IsClient)
         {
             SetUpKickOffEvents.OnListChanged += OnSetUpKickOffEventsChanged;
             KickOffEvents.OnListChanged += OnKickOffEventsChanged;
@@ -75,7 +76,7 @@ public class MatchStateManager : NetworkBehaviour
             GoalEventBus.OnGoalScored -= OnGoalScored;
         }
 
-        if (IsClient && !IsServer)
+        if (IsClient)
         {
             SetUpKickOffEvents.OnListChanged -= OnSetUpKickOffEventsChanged;
             KickOffEvents.OnListChanged -= OnKickOffEventsChanged;
@@ -97,11 +98,9 @@ public class MatchStateManager : NetworkBehaviour
     {
         SetUpKickOffEvent newKickOff = new SetUpKickOffEvent
         {
-            KickOffID = _nextSetupKickOffID++,
+            SetUpKickOffID = _nextSetupKickOffID++,
         };
         SetUpKickOffEvents.Add(newKickOff);
-
-        SetUpKickOffEventBus.RaiseKickOffSetup(newKickOff);
 
         const int maxKickOffsToKeep = 2;
         if (SetUpKickOffEvents.Count > maxKickOffsToKeep)
@@ -116,8 +115,6 @@ public class MatchStateManager : NetworkBehaviour
             KickingOffTeam = kickOffTeam
         };
         KickOffEvents.Add(newKickOff);
-
-        KickOffEventBus.RaiseKickOff(newKickOff);
 
         const int maxKickOffsToKeep = 2;
         if (KickOffEvents.Count > maxKickOffsToKeep)
@@ -145,15 +142,23 @@ public class MatchStateManager : NetworkBehaviour
     private void Update()
     {
         if (!IsServer) return;
+        if (CurrentMatchState.Value == MatchState.GameOver) return;
 
         double currentTime = NetworkManager.Singleton.ServerTime.Time;
 
         if (CurrentMatchState.Value == MatchState.WaitingForPlayers && NetworkManager.Singleton.ConnectedClientsIds.Count == 2)
         {
-            CurrentMatchState.Value = MatchState.KickOff;
-            RegisterKickOffSetUp();
+            CurrentMatchState.Value = MatchState.KickOff;     
             PhaseEndTime.Value = currentTime + _kickOffDuration;
+            RegisterKickOffSetUp();
             Debug.Log("Two players connected. Transitioning to KickOff phase.");
+            return;
+        }
+
+        if (CurrentMatchState.Value == MatchState.InPlay && TimeManager.Instance.MatchEndTime.Value > 0 && currentTime >= TimeManager.Instance.MatchEndTime.Value)
+        {
+            CurrentMatchState.Value = MatchState.GameOver;
+            Debug.Log("Match time ended. Transitioning to GameOver phase.");
             return;
         }
 
@@ -173,9 +178,9 @@ public class MatchStateManager : NetworkBehaviour
                 break;
             case MatchState.GoalScored:
                 CurrentMatchState.Value = MatchState.KickOff;
-                Debug.Log($"Goal scored! Transitioning to KickOff phase.");
-                RegisterKickOffSetUp();
+                Debug.Log($"Goal scored! Transitioning to KickOff phase.");  
                 PhaseEndTime.Value = currentTime + _kickOffDuration;
+                RegisterKickOffSetUp();
                 break;
         }
     }

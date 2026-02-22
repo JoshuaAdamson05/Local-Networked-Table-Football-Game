@@ -81,8 +81,8 @@ public class KickOffManager : NetworkBehaviour
         if (!IsServer) return;
         if (_footballManager == null) return;
         if (_blueRodManager == null || _redRodManager == null) return;
-        if (setUpKickOff.KickOffID <= _lastProcessedSetupKickOffID) return;
-        _lastProcessedSetupKickOffID = setUpKickOff.KickOffID;   
+        if (setUpKickOff.SetUpKickOffID <= _lastProcessedSetupKickOffID) return;
+        _lastProcessedSetupKickOffID = setUpKickOff.SetUpKickOffID;   
         _footballManager.SetVelocity(Vector2.zero);
         _footballManager.ResetFootballPosition(Vector2.zero);
         _redRodManager.ResetRodPosition();
