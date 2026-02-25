@@ -1,11 +1,16 @@
 using UnityEngine;
 using Unity.Netcode;
+using NUnit.Framework;
+using System.Collections.Generic;
 
 public class NetworkTickManager : NetworkBehaviour
 {
     public static NetworkTickManager Instance { get; private set; }
-    public int ServerTick { get; private set; }
+    public uint ServerTick { get; private set; }
+    public uint ClientTick { get; private set; }
     private double _nextTickTime;
+    private double _lastTickTime = 0;
+    private bool _clientTickInitialised = false;
 
     [SerializeField] private double _tickRateHertz = 30;
     private double _tickInterval => 1.0 / _tickRateHertz;
@@ -21,46 +26,116 @@ public class NetworkTickManager : NetworkBehaviour
             Destroy(this);
             return;
         }
-        Instance = this;
+        Instance = this;       
     }
 
     public override void OnNetworkSpawn()
-    { 
-        if (!IsServer) return;
-        _serverStartTime.Value = NetworkManager.Singleton.ServerTime.Time;
-        _nextTickTime = NetworkManager.Singleton.ServerTime.Time + _tickInterval;
-        ServerTick = 0;
+    {
+        NetworkManager.Singleton.OnClientConnectedCallback += OnClientConnected;
     }
 
-    private double _lastTickTime = 0;
-
-    private void Update()
+    public override void OnNetworkDespawn()
     {
-        if (!IsServer) return;
+        if (NetworkManager.Singleton != null)
+            NetworkManager.Singleton.OnClientConnectedCallback -= OnClientConnected;
+    }
 
-        while (NetworkManager.Singleton.ServerTime.Time >= _nextTickTime)
+    private void OnClientConnected(ulong clientId)
+    {
+        if (IsServer && _serverStartTime.Value <= 0.0)
         {
-            double lateBy = NetworkManager.Singleton.ServerTime.Time - _nextTickTime;       
-            double dt = (ServerTick == 1) ? 0 : (NetworkManager.Singleton.ServerTime.Time - _lastTickTime);
-
-            _nextTickTime += _tickInterval;
-            ServerTick++;
-            _lastTickTime = NetworkManager.Singleton.ServerTime.Time;
-
-            Debug.Log($"Server Tick: {ServerTick} | Delta Time: {dt:F6} | Late By: {lateBy:F6} | Target Interval {_tickInterval:F6}");
+            double currentTime = NetworkManager.Singleton.ServerTime.Time;
+            if (currentTime > 0.0001)
+            {
+                _serverStartTime.Value = currentTime;
+                _nextTickTime = currentTime + _tickInterval;
+                ServerTick = 0;
+            }
         }
     }
 
-    public int PredictedServerTick
+    private void Update()
+    {
+        // Ensure server start time is set before processing ticks
+        if (_serverStartTime.Value <= 0.0)
+        {
+            double now = NetworkManager.Singleton.ServerTime.Time;
+            if (now > 0.0001)
+            {
+                _serverStartTime.Value = now;
+                _nextTickTime = now + _tickInterval;
+                ServerTick = 0;
+                _lastTickTime = 0;
+                Debug.Log($"[Server] Tick start initialised (late) at {now:F6}");
+            }
+            return;
+        }
+
+        if (IsServer)
+        {    
+            double currentTime = NetworkManager.Singleton.ServerTime.Time;
+            while (currentTime >= _nextTickTime)
+            {          
+                double lateBy = currentTime - _nextTickTime;
+
+                _nextTickTime += _tickInterval;
+                ServerTick++;
+                NetworkTickEventBus.RaiseServerNetworkTick(new NetworkTickEvent { TickID = ServerTick });
+
+                double dt = (_lastTickTime <= 0) ? 0 : (currentTime - _lastTickTime);
+                _lastTickTime = currentTime;
+
+                if (ServerTick % 30 == 0)
+                    Debug.Log($"Server Tick: {ServerTick} | Delta Time: {dt:F6} | Late By: {lateBy:F6} | Target Interval {_tickInterval:F6}");
+                currentTime = NetworkManager.Singleton.ServerTime.Time;
+            }
+        }
+
+        if (IsClient && !IsServer)
+        {
+            if (!NetworkManager.Singleton.IsConnectedClient)
+            {
+                Debug.LogWarning("Client is not connected to a server. Cannot process ticks.");
+                return;
+            }
+
+            if (!_clientTickInitialised)
+            {
+                if (_serverStartTime.Value <= 0) return;
+
+                ClientTick = 0;
+                _clientTickInitialised = true;
+                Debug.Log($"Client tick initialised. Server start time: {_serverStartTime.Value:F6}");
+            }
+
+            uint target = PredictedServerTick;
+            int processedTicks = 0;
+            const int maxCatchUpTicksPerFrame = 5;
+
+            while (ClientTick < target && processedTicks < maxCatchUpTicksPerFrame)
+            {
+                ClientTick++;
+                processedTicks++;
+                NetworkTickEventBus.RaiseClientNetworkTick(new NetworkTickEvent { TickID = ClientTick });
+                if (ClientTick % 30 == 0)
+                    Debug.Log($"Client Tick: {ClientTick} | Target Server Tick: {target} | Processed Ticks This Frame: {processedTicks}");
+            }
+        }
+    }
+
+    public uint PredictedServerTick
     {
         get
         {
-            if (_serverStartTime.Equals(0))
+            double startTime = _serverStartTime.Value;
+            if (startTime <= 0)
                 return 0;
 
-            double elapsedTime = NetworkManager.Singleton.ServerTime.Time - _serverStartTime.Value;
-            if (elapsedTime < 0) return 0;
-            return Mathf.FloorToInt((float)(elapsedTime / _tickInterval));
+            double elapsedTime = NetworkManager.Singleton.ServerTime.Time - startTime;
+            if (elapsedTime < 0)
+                return 0;
+
+            return (uint)Mathf.FloorToInt((float)(elapsedTime / _tickInterval));
         }
     }
 }

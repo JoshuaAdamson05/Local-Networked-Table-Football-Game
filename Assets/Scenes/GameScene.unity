@@ -5349,8 +5349,8 @@ GameObject:
   serializedVersion: 6
   m_Component:
   - component: {fileID: 1986870236}
-  - component: {fileID: 1986870235}
   - component: {fileID: 1986870234}
+  - component: {fileID: 1986870235}
   m_Layer: 0
   m_Name: NetworkTickManager
   m_TagString: Untagged
