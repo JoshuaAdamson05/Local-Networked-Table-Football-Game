@@ -13,6 +13,11 @@ public class FootballManager : NetworkBehaviour
 
     public override void OnNetworkSpawn()
     {
+        if (!IsServer && IsClient)
+        {
+            _footballRb.simulated = false;
+        }
+
         if (IsServer)
         {
             Debug.Log("FootballManager spawned on the server.");
