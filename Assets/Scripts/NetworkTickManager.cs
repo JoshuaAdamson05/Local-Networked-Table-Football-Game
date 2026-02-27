@@ -2,6 +2,7 @@ using UnityEngine;
 using Unity.Netcode;
 using NUnit.Framework;
 using System.Collections.Generic;
+using System;
 
 public class NetworkTickManager : NetworkBehaviour
 {
@@ -137,5 +138,17 @@ public class NetworkTickManager : NetworkBehaviour
 
             return (uint)Mathf.FloorToInt((float)(elapsedTime / _tickInterval));
         }
+    }
+
+    public int GetBufferTicks(double bufferWindowSeconds)
+    {
+        return (int)Math.Ceiling(bufferWindowSeconds / _tickInterval);
+    }
+
+    public uint GetNumberOfTicksForDelay(int delayMs)
+    {
+        double tickMs = _tickInterval * 1000;
+        double ticks = delayMs / tickMs;
+        return (uint)Math.Ceiling(ticks);
     }
 }
