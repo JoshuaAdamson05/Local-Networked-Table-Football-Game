@@ -13,7 +13,7 @@ public class FootballManager : NetworkBehaviour
 
     public override void OnNetworkSpawn()
     {
-        if (!IsServer && IsClient)
+        if (!IsServer)
         {
             _footballRb.simulated = false;
         }

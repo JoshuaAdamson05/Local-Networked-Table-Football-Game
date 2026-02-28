@@ -1,10 +1,7 @@
 using UnityEngine;
 using Unity.Netcode;
-using System.Collections;
 using System.Collections.Generic;
 using System;
-using Unity.VisualScripting;
-using UnityEngine.UIElements;
 
 public struct BallSnapshot : INetworkSerializable
 {
@@ -32,6 +29,7 @@ public class BallSnapshotManager : NetworkBehaviour
     [SerializeField] private GameObject _football;
     [SerializeField] private double _bufferWindowSeconds = 0.5;
     [SerializeField] private int _interpolationDelayMs = 100;
+    [SerializeField] private uint _maxExtrapolationTicks = 3;
     private uint _delayTicks;
     private List<BallSnapshot> _clientBallSnapshots;
     private uint _lastReceivedTick;
@@ -43,7 +41,7 @@ public class BallSnapshotManager : NetworkBehaviour
             NetworkTickEventBus.OnServerNetworkTick += OnServerNetworkTick;
         }
 
-        if (!IsServer && IsClient)
+        if (!IsServer)
         {
             _clientBallSnapshots = new List<BallSnapshot>();
             if (NetworkTickManager.Instance == null)
@@ -96,25 +94,46 @@ public class BallSnapshotManager : NetworkBehaviour
 
     private void Update()
     {
-        if (NetworkManager.Singleton == null) return;
-        if (NetworkManager.Singleton.ConnectedClients.Count == 0) return;
+        if (NetworkManager.Singleton == null) return;             
+        if (NetworkTickManager.Instance == null) return;
+        if (!NetworkManager.Singleton.IsConnectedClient) return;
+        if (IsServer) return;
 
-        if (!IsServer)
+        double predictedServerTick = NetworkTickManager.Instance.PredictedPreciseServerTick;
+        double renderTick = predictedServerTick - _delayTicks;
+        if (predictedServerTick <= _delayTicks)
+            renderTick = 0;
+        CleanSnapshots();
+        if (_clientBallSnapshots.Count == 0) return;
+
+        //Snap to position
+        if (renderTick <= _clientBallSnapshots[0].Tick)
         {
-            uint renderTick = NetworkTickManager.Instance.PredictedServerTick - _delayTicks;    
-            CleanSnapshots();
-            if (_clientBallSnapshots.Count >= 2)
-            {
-                (uint, BallSnapshot) snapshotB = GetFollowingTick(renderTick);
-                (uint, BallSnapshot) snapshotA = GetPreviousClosestTick(renderTick);
+            _football.transform.position = _clientBallSnapshots[0].Position;
+        }
+        //Extrapolate
+        else if (renderTick >= _clientBallSnapshots[^1].Tick)
+        {
+            BallSnapshot lastSnapshot = _clientBallSnapshots[^1];
+            double tickDelta = renderTick - lastSnapshot.Tick;
+            tickDelta = Math.Clamp(tickDelta, 0, _maxExtrapolationTicks);
+            float timeDelta = NetworkTickManager.Instance.GetTimeDelta(tickDelta);
+            Vector2 predictedPosition = lastSnapshot.Position + lastSnapshot.Velocity * timeDelta;
+            _football.transform.position = predictedPosition;
+        }
+        //Interpolate
+        else if (_clientBallSnapshots.Count >= 2)
+        {
+            (uint, BallSnapshot) snapshotB; 
+            (uint, BallSnapshot) snapshotA;
+            GetRenderBracketTicks(renderTick, out snapshotB, out snapshotA);
 
-                if (snapshotB.Item1 > snapshotA.Item1)
-                {
-                    float t = (renderTick - snapshotA.Item1) / (float)(snapshotB.Item1 - snapshotA.Item1);
-                    t = Math.Clamp(t, 0, 1);
-                    Vector2 position = Vector2.Lerp(snapshotA.Item2.Position, snapshotB.Item2.Position, t);
-                    _football.transform.position = position;
-                }
+            if (snapshotB.Item1 > snapshotA.Item1)
+            {
+                float t = (float)((renderTick - snapshotA.Item1) / (snapshotB.Item1 - snapshotA.Item1));
+                t = Math.Clamp(t, 0, 1);
+                Vector2 position = Vector2.Lerp(snapshotA.Item2.Position, snapshotB.Item2.Position, t);
+                _football.transform.position = position;
             }
         }
     }
@@ -137,7 +156,7 @@ public class BallSnapshotManager : NetworkBehaviour
         }
     }
 
-    private (uint, BallSnapshot) GetFollowingTick(uint tick)
+    private void GetRenderBracketTicks(double tick, out (uint, BallSnapshot) snapshotB, out (uint, BallSnapshot) snapshotA)
     {
         int index = -1;
         for (int i = 0; i < _clientBallSnapshots.Count; i++)
@@ -151,26 +170,11 @@ public class BallSnapshotManager : NetworkBehaviour
         }
         if (index == -1)
             index = _clientBallSnapshots.Count - 1;
+        snapshotB = (_clientBallSnapshots[index].Tick, _clientBallSnapshots[index]);
 
-        return (_clientBallSnapshots[index].Tick, _clientBallSnapshots[index]);
-    }
-
-    private (uint, BallSnapshot) GetPreviousClosestTick(uint tick)
-    {
-        int index = -1;
-        for (int i = 0; i < _clientBallSnapshots.Count; i++)
-        {
-            BallSnapshot snapshot = _clientBallSnapshots[i];
-            if (snapshot.Tick >= tick)
-            {
-                index = i;
-                break;
-            }
-        }
         if (index <= 0)
             index = 1;
-
-        return (_clientBallSnapshots[index - 1].Tick, _clientBallSnapshots[index - 1]);
+        snapshotA = (_clientBallSnapshots[index - 1].Tick, _clientBallSnapshots[index - 1]);
     }
 
     //private void Update()

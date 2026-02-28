@@ -92,7 +92,7 @@ public class NetworkTickManager : NetworkBehaviour
             }
         }
 
-        if (IsClient && !IsServer)
+        if (!IsServer)
         {
             if (!NetworkManager.Singleton.IsConnectedClient)
             {
@@ -109,7 +109,7 @@ public class NetworkTickManager : NetworkBehaviour
                 Debug.Log($"Client tick initialised. Server start time: {_serverStartTime.Value:F6}");
             }
 
-            uint target = PredictedServerTick;
+            double target = PredictedPreciseServerTick;
             int processedTicks = 0;
             const int maxCatchUpTicksPerFrame = 5;
 
@@ -119,12 +119,12 @@ public class NetworkTickManager : NetworkBehaviour
                 processedTicks++;
                 NetworkTickEventBus.RaiseClientNetworkTick(new NetworkTickEvent { TickID = ClientTick });
                 if (ClientTick % 30 == 0)
-                    Debug.Log($"Client Tick: {ClientTick} | Target Server Tick: {target} | Processed Ticks This Frame: {processedTicks}");
+                    Debug.Log($"Client Tick: {ClientTick} | Target Server Tick: {(int)target} | Processed Ticks This Frame: {processedTicks}");
             }
         }
     }
 
-    public uint PredictedServerTick
+    public double PredictedPreciseServerTick
     {
         get
         {
@@ -136,7 +136,7 @@ public class NetworkTickManager : NetworkBehaviour
             if (elapsedTime < 0)
                 return 0;
 
-            return (uint)Mathf.FloorToInt((float)(elapsedTime / _tickInterval));
+            return elapsedTime / _tickInterval;
         }
     }
 
@@ -150,5 +150,10 @@ public class NetworkTickManager : NetworkBehaviour
         double tickMs = _tickInterval * 1000;
         double ticks = delayMs / tickMs;
         return (uint)Math.Ceiling(ticks);
+    }
+
+    public float GetTimeDelta(double tickDelta)
+    {
+        return (float)tickDelta * (float)_tickInterval;
     }
 }
