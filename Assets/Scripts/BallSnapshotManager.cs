@@ -30,15 +30,26 @@ public class BallSnapshotManager : NetworkBehaviour
     [SerializeField] private double _bufferWindowSeconds = 0.5;
     [SerializeField] private int _interpolationDelayMs = 100;
     [SerializeField] private uint _maxExtrapolationTicks = 3;
+    private Rigidbody2D _footballRb;
+    private float _maxSnapDistance;
     private uint _delayTicks;
     private List<BallSnapshot> _clientBallSnapshots;
     private uint _lastReceivedTick;
+    private Vector2 _targetPosition;
+    private Vector2 _lastPhysicPosition;
+    private Vector2 _lastPhysicsVelocity;
 
     public override void OnNetworkSpawn()
     {
+        if (_football == null)
+        {
+            Debug.LogError("Football not set on ball snapshot manager.");
+        }
+
         if (IsServer)
         {
             NetworkTickEventBus.OnServerNetworkTick += OnServerNetworkTick;
+            _football.TryGetComponent<Rigidbody2D>(out _footballRb);
         }
 
         if (!IsServer)
@@ -51,14 +62,13 @@ public class BallSnapshotManager : NetworkBehaviour
             }
 
             _delayTicks = NetworkTickManager.Instance.GetNumberOfTicksForDelay(_interpolationDelayMs);
+
+            CircleCollider2D collider = _football.GetComponent<CircleCollider2D>();
+            float worldRadius = collider.radius * Mathf.Max(_football.transform.lossyScale.x, _football.transform.lossyScale.y);
+            _maxSnapDistance = worldRadius * 1.25f;
         }
 
-        if (_football == null)
-        {
-            Debug.LogError("Football not set on ball snapshot manager.");
-        }
-
-        Debug.Log($"Ball manager spawned on {IsServer} (Server) or on Client {(IsClient && !IsServer)}");
+        Debug.Log($"Ball manager spawned on {IsServer} (Server) or on Client {(!IsServer)}");
     }
 
     public override void OnNetworkDespawn()
@@ -75,13 +85,20 @@ public class BallSnapshotManager : NetworkBehaviour
         if (_football == null) return;
         if (NetworkManager.Singleton == null) return;
         if (NetworkManager.ConnectedClients.Count == 0) return;
-        Rigidbody2D footballRb;
-        _football.TryGetComponent<Rigidbody2D>(out footballRb);
-        BallSnapshot ballSnapshot = new BallSnapshot(footballRb.position, footballRb.linearVelocity, networkTick.TickID);
+        BallSnapshot ballSnapshot = new BallSnapshot(_lastPhysicPosition, _lastPhysicsVelocity, networkTick.TickID);
         SendFootballSnapshotClientRpc(ballSnapshot);
     }
 
-    [ClientRpc]
+    private void FixedUpdate()
+    {
+        if (!IsServer) return;
+
+        _lastPhysicPosition = _footballRb.position;
+        _lastPhysicsVelocity = _footballRb.linearVelocity;
+    }
+
+    //Stop retransmits blocking newer data
+    [ClientRpc(Delivery = RpcDelivery.Unreliable)]
     private void SendFootballSnapshotClientRpc(BallSnapshot ballSnapshot)
     {
         if (IsServer) return;
@@ -109,7 +126,7 @@ public class BallSnapshotManager : NetworkBehaviour
         //Snap to position
         if (renderTick <= _clientBallSnapshots[0].Tick)
         {
-            _football.transform.position = _clientBallSnapshots[0].Position;
+            _targetPosition = _clientBallSnapshots[0].Position;
         }
         //Extrapolate
         else if (renderTick >= _clientBallSnapshots[^1].Tick)
@@ -119,7 +136,7 @@ public class BallSnapshotManager : NetworkBehaviour
             tickDelta = Math.Clamp(tickDelta, 0, _maxExtrapolationTicks);
             float timeDelta = NetworkTickManager.Instance.GetTimeDelta(tickDelta);
             Vector2 predictedPosition = lastSnapshot.Position + lastSnapshot.Velocity * timeDelta;
-            _football.transform.position = predictedPosition;
+            _targetPosition = predictedPosition;
         }
         //Interpolate
         else if (_clientBallSnapshots.Count >= 2)
@@ -133,9 +150,23 @@ public class BallSnapshotManager : NetworkBehaviour
                 float t = (float)((renderTick - snapshotA.Item1) / (snapshotB.Item1 - snapshotA.Item1));
                 t = Math.Clamp(t, 0, 1);
                 Vector2 position = Vector2.Lerp(snapshotA.Item2.Position, snapshotB.Item2.Position, t);
-                _football.transform.position = position;
+                _targetPosition = position;
+            }
+            else
+            {
+                _targetPosition = snapshotA.Item2.Position;
             }
         }
+
+        Vector2 currentPosition = _football.transform.position;
+        float errorDistance = Vector2.Distance(currentPosition, _targetPosition);
+        if (errorDistance >= _maxSnapDistance)
+        {
+            _football.transform.position = _targetPosition;
+            return;
+        }
+
+        _football.transform.position = _targetPosition;
     }
 
     private void CleanSnapshots()
