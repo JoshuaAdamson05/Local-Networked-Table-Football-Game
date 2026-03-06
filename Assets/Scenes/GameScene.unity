@@ -4801,8 +4801,8 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::RodSpawner
   ShowTopMostFoldoutHeaderGroup: 1
-  _blueRodPrefab: {fileID: 3274281804096603663, guid: f495233d09c6cda4e963ac5c503473f1, type: 3}
-  _redRodPrefab: {fileID: 7783878928163720185, guid: 93278f6cfe60f624b8ad8b449a25b0a6, type: 3}
+  _blueRodPrefab: {fileID: 1933220901054390931, guid: c001e783c67aa094a826ab076efb8cd0, type: 3}
+  _redRodPrefab: {fileID: 249681412411097239, guid: 50ada2401e94b0640bbd1cbed4cca594, type: 3}
 --- !u!1 &1831177967
 GameObject:
   m_ObjectHideFlags: 0
