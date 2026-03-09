@@ -654,7 +654,7 @@ GameObject:
   - component: {fileID: 5227922999913966421}
   - component: {fileID: 4383959963695165466}
   m_Layer: 0
-  m_Name: Red Rods Root
+  m_Name: Red Rods Root v1
   m_TagString: RedRods
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0

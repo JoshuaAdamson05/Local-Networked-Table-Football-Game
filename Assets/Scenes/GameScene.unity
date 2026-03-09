@@ -2160,7 +2160,7 @@ CircleCollider2D:
   m_CompositeOperation: 0
   m_CompositeOrder: 0
   m_Offset: {x: 0, y: 0}
-  m_Radius: 3.35
+  m_Radius: 3.45
 --- !u!114 &574725832
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -2176,7 +2176,7 @@ MonoBehaviour:
   ShowTopMostFoldoutHeaderGroup: 1
   _footballRb: {fileID: 574725829}
   _footballCollider: {fileID: 1568180846}
-  _footballSpeed: 4.5
+  _footballSpeed: 3.75
 --- !u!114 &574725833
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -5394,7 +5394,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::NetworkTickManager
   ShowTopMostFoldoutHeaderGroup: 1
-  _tickRateHertz: 30
+  _tickRateHertz: 50
 --- !u!4 &1986870236
 Transform:
   m_ObjectHideFlags: 0
@@ -5452,7 +5452,7 @@ MonoBehaviour:
   ConnectionData:
     Address: 127.0.0.1
     Port: 7777
-    ServerListenAddress: 127.0.0.1
+    ServerListenAddress: 0.0.0.0
     ClientBindPort: 0
   DebugSimulator:
     PacketDelayMS: 0

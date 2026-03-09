@@ -10,6 +10,7 @@ public class FootballManager : NetworkBehaviour
     [SerializeField] private float _footballSpeed;
     private BoxCollider2D _pitchBounds;
     private Vector2 _lastVelocity;
+    private Vector2 _lastPosition;
 
     public override void OnNetworkSpawn()
     {
@@ -55,6 +56,7 @@ public class FootballManager : NetworkBehaviour
             _footballRb.linearVelocity = _footballRb.linearVelocity.normalized * _footballSpeed;
         }
         _lastVelocity = _footballRb.linearVelocity;
+        _lastPosition = _footballRb.position;
 
         ReflectBallAtPitchBounds();
     }
@@ -65,6 +67,8 @@ public class FootballManager : NetworkBehaviour
         if (_footballRb == null) return;
 
         Debug.Log($"Football collided with {collision.gameObject.name}");
+
+        _footballRb.position = _lastPosition;
 
         ContactPoint2D contactPoint = collision.GetContact(0);
 

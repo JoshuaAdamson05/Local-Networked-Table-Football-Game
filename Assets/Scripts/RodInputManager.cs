@@ -1,8 +1,6 @@
-using NUnit.Framework;
 using System;
 using System.Collections.Generic;
 using Unity.Netcode;
-using Unity.Netcode.Components;
 using UnityEngine;
 using UnityEngine.InputSystem;
 
@@ -12,23 +10,64 @@ public enum RodAuthorityMode
     ClientAuthoritative,
 }
 
-public struct RodSnapshot : INetworkSerializable
+public struct ServerAuthoritativeRodSnapshot : INetworkSerializable
 {
-    public RodSnapshot(Vector2 position, float moveValue, uint tick)
+    public ServerAuthoritativeRodSnapshot(Vector2 position, uint tick, uint resetId)
     {
         Position = position;
-        MoveValue = moveValue;
         Tick = tick;
+        ResetId = resetId;
     }
 
     public Vector2 Position;
-    public float MoveValue;
     public uint Tick;
+    public uint ResetId;
 
     public void NetworkSerialize<T>(BufferSerializer<T> serializer) where T : IReaderWriter
     {
         serializer.SerializeValue(ref Position);
-        serializer.SerializeValue(ref MoveValue);
+        serializer.SerializeValue(ref Tick);
+        serializer.SerializeValue(ref ResetId);
+    }
+}
+public struct ClientAuthoritativeRodSnapshot : INetworkSerializable
+{
+    public ClientAuthoritativeRodSnapshot(Vector2 position, uint serverTick, uint processedClientTick, uint resetID)
+    {
+        Position = position;
+        ServerTick = serverTick;
+        ProcessedClientTick = processedClientTick;
+        ResetId = resetID;
+    }
+
+    public Vector2 Position;
+    public uint ServerTick;
+    public uint ProcessedClientTick;
+    public uint ResetId;
+
+    public void NetworkSerialize<T>(BufferSerializer<T> serializer) where T : IReaderWriter
+    {
+        serializer.SerializeValue(ref Position);
+        serializer.SerializeValue(ref ServerTick);
+        serializer.SerializeValue(ref ProcessedClientTick);
+        serializer.SerializeValue(ref ResetId);
+    }
+}
+
+public struct ClientRodSnapshot : INetworkSerializable
+{
+    public ClientRodSnapshot(float inputMoveValue, uint tick)
+    {
+        InputMoveValue = inputMoveValue;
+        Tick = tick;
+    }
+
+    public float InputMoveValue;
+    public uint Tick;
+
+    public void NetworkSerialize<T>(BufferSerializer<T> serializer) where T: IReaderWriter
+    {
+        serializer.SerializeValue(ref InputMoveValue);
         serializer.SerializeValue(ref Tick);
     }
 }
@@ -38,23 +77,56 @@ public class RodInputManager : NetworkBehaviour
     [SerializeField] private InputAction _moveAction;
     [SerializeField] private float _moveSpeed;
     [SerializeField] private GameObject _visualRodGameObject;
-    [SerializeField] private GameObject _colliderGameObject;
+    [SerializeField] private GameObject _colliderRodGameObject;
     [SerializeField] private RodAuthorityMode _authoritativeMode = RodAuthorityMode.ServerAuthoritative;
     [SerializeField] private double _bufferWindowSeconds = 0.5;
     [SerializeField] private int _interpolationDelayMs = 100;
+    [SerializeField] float _maxCorrectionDistance = 0.15f;
     private BoxCollider2D _pitchBounds;
     private float _clientMoveValue;
     private float _serverMoveValue;
     private Vector2 _rodPhysicsPosition;
     private uint _lastReceivedTick;
-    private List<RodSnapshot> _serverRodSnapshots;
-    private List<RodSnapshot> _clientRodSnapshots;
+    private uint _lastProcessedTick;
+    private uint _currentClientTick;
+    private uint _lastReceivedHostRodTick;
+    private uint _lastReceivedClientRodTick;
+    private List<ServerAuthoritativeRodSnapshot> _serverSnapshots;
+    private List<ClientAuthoritativeRodSnapshot> _reconciliationSnapshots;
+    private List<InputState> _pendingInputs;
+    private List<PredictedState> _predictedStates;
     private BoxCollider2D _visualRodBounds;
     private BoxCollider2D _colliderRodBounds;
-    private Rigidbody2D _visualRb;
+    private bool _shouldCorrectClientPosition = false;
     private Rigidbody2D _colliderRb;
     private uint _delayTicks;
-    private Vector2 _targetPosition;
+    private Vector2 _targetVisualPosition;
+    private Vector2 _targetPhysicsPosition;
+    private uint _resetId = 0;
+
+    public struct InputState
+    {
+        public uint Tick;
+        public float InputMoveValue;
+
+        public InputState(uint tick, float inputMoveValue)
+        {
+            Tick = tick;
+            InputMoveValue = inputMoveValue;
+        }
+    }
+
+    public struct PredictedState
+    {
+        public uint Tick;
+        public Vector2 Position;
+
+        public PredictedState(uint tick, Vector2 position)
+        {
+            Tick = tick;
+            Position = position;
+        }
+    }
 
     public override void OnNetworkSpawn()
     {
@@ -78,21 +150,17 @@ public class RodInputManager : NetworkBehaviour
             _visualRodBounds = _visualRodGameObject.GetComponentInChildren<BoxCollider2D>();
             if (_visualRodBounds == null)
                 Debug.LogError("Visual rod bounds missing");
-
-            _visualRb = _visualRodGameObject.GetComponentInChildren<Rigidbody2D>();
-            if (_visualRb == null)
-                Debug.LogError("Visual rb missing");
         }
         else
             Debug.LogError("Visual rod game object missing");
 
-        if (_colliderGameObject != null)
+        if (_colliderRodGameObject != null)
         {
-            _colliderRodBounds = _colliderGameObject.GetComponentInChildren<BoxCollider2D>();
+            _colliderRodBounds = _colliderRodGameObject.GetComponentInChildren<BoxCollider2D>();
             if (_colliderRodBounds == null)
                 Debug.LogError("Collider rod bounds missing");
 
-            _colliderRb = _colliderGameObject.GetComponentInChildren<Rigidbody2D>();
+            _colliderRb = _colliderRodGameObject.GetComponentInChildren<Rigidbody2D>();
             if (_colliderRb == null)
                 Debug.LogError("Collider rb missing");
         }
@@ -102,17 +170,20 @@ public class RodInputManager : NetworkBehaviour
         if (!IsServer)
         {
             NetworkTickEventBus.OnClientNetworkTick += OnClientNetworkTick;
-            _clientRodSnapshots = new List<RodSnapshot>();
-            if (NetworkTickManager.Instance != null)
-            {
-                _delayTicks = NetworkTickManager.Instance.GetNumberOfTicksForDelay(_interpolationDelayMs);
-            }
+            _serverSnapshots = new List<ServerAuthoritativeRodSnapshot>();
+            _reconciliationSnapshots = new List<ClientAuthoritativeRodSnapshot>();
+            _pendingInputs = new List<InputState>();
+            _predictedStates = new List<PredictedState>();
         }
 
         if (IsServer)
         {
             NetworkTickEventBus.OnServerNetworkTick += OnServerNetworkTick;
-            _serverRodSnapshots = new List<RodSnapshot>();
+        }
+
+        if (NetworkTickManager.Instance != null)
+        {
+            _delayTicks = NetworkTickManager.Instance.GetNumberOfTicksForDelay(_interpolationDelayMs);
         }
     }
 
@@ -132,78 +203,156 @@ public class RodInputManager : NetworkBehaviour
 
     void Update()
     {
+        if (MatchStateManager.Instance == null) return;   
+        if (MatchStateManager.Instance.CurrentMatchState.Value != MatchState.InPlay) return;
+        if (IsOwner)
+            _clientMoveValue = MatchStateManager.Instance.CurrentMatchState.Value == MatchState.InPlay ? _moveAction.ReadValue<float>() : 0f;
+
         if (!IsServer)
         {
-            if (MatchStateManager.Instance == null) return;
-            _clientMoveValue = MatchStateManager.Instance.CurrentMatchState.Value == MatchState.InPlay ? _moveAction.ReadValue<float>() : 0f;
             if (_authoritativeMode == RodAuthorityMode.ServerAuthoritative)
             {
                 if (IsOwner)
                     SubmitMoveRequestServerRpc(_clientMoveValue);
+
+                ClientRodInterpolation();
             }
-            if (NetworkManager.Singleton == null) return;
-            if (NetworkTickManager.Instance == null) return;
-            if (_clientRodSnapshots.Count == 0) return;
-
-            double predictedServerTick = NetworkTickManager.Instance.PredictedPreciseServerTick;
-            double renderTick = predictedServerTick - _delayTicks;
-            if (predictedServerTick <= _clientRodSnapshots[0].Tick)
-                renderTick = 0;
-            CleanSnapshots(_clientRodSnapshots);
-            if (_clientRodSnapshots.Count == 0) return;
-
-            //Snap to position
-            if (renderTick <= _clientRodSnapshots[0].Tick)
+            else
             {
-                _targetPosition = _clientRodSnapshots[0].Position;
-            }
-            //Interpolate
-            else if (_clientRodSnapshots.Count >= 2)
-            {
-                (uint, RodSnapshot) snapshotB;
-                (uint, RodSnapshot) snapshotA;
-                GetRenderBracketTicks(renderTick, out snapshotB, out snapshotA);
-
-                if (snapshotB.Item1 > snapshotA.Item1)
+                if (IsOwner)
                 {
-                    float t = (float)((renderTick - snapshotA.Item1) / (snapshotB.Item1 - snapshotA.Item1));
-                    t = Math.Clamp(t, 0, 1);
-                    Vector2 position = Vector2.Lerp(snapshotA.Item2.Position, snapshotB.Item2.Position, t);
-                    _targetPosition = position;
+                    //Reconciliation
+                    if (_reconciliationSnapshots.Count == 0) return;
+
+                    while (_reconciliationSnapshots.Count > 0)
+                    {
+                        ClientAuthoritativeRodSnapshot snapshot = _reconciliationSnapshots[0];
+                        if (_lastProcessedTick < snapshot.ProcessedClientTick)
+                        {             
+                            while (_predictedStates.Count > 0 && _predictedStates[0].Tick < snapshot.ProcessedClientTick)
+                            {
+                                _predictedStates.RemoveAt(0);
+                            }
+
+                            if (_predictedStates.Count > 0 &&
+                                _predictedStates[0].Tick == snapshot.ProcessedClientTick)
+                            {
+                                PredictedState predictedState = _predictedStates[0];
+
+                                float errorDistance = Vector2.Distance(predictedState.Position, snapshot.Position);
+
+                                if (errorDistance >= _maxCorrectionDistance)
+                                {
+                                    _targetPhysicsPosition = snapshot.Position;
+                                    _shouldCorrectClientPosition = true;
+                                }     
+                                _predictedStates.RemoveAt(0);
+                            }
+
+                            _lastProcessedTick = snapshot.ProcessedClientTick;
+
+                            while (_pendingInputs.Count > 0 && _pendingInputs[0].Tick <= snapshot.ProcessedClientTick)
+                            {
+                                _pendingInputs.RemoveAt(0);
+                            }
+                        }
+                        _reconciliationSnapshots.RemoveAt(0);
+                    }
                 }
                 else
                 {
-                    _targetPosition = snapshotA.Item2.Position;
+                    ClientRodInterpolation();
                 }
-            }   
-            _visualRb.MovePosition(_targetPosition);
+            }
         }
 
         if (IsServer)
         {
-            _clientMoveValue = MatchStateManager.Instance.CurrentMatchState.Value == MatchState.InPlay ? _moveAction.ReadValue<float>() : 0f;
-            _visualRb.MovePosition(_colliderRb.position);
+            _targetVisualPosition = _colliderRodGameObject.transform.position;
         }
     }
 
-    [ClientRpc(Delivery = RpcDelivery.Unreliable)]
-    private void SendRodClientRpc(RodSnapshot rodSnapshot)
+    private void ClientRodInterpolation()
     {
-        if (IsServer) return;
+        if (NetworkTickManager.Instance == null) return;
+
+        CleanSnapshots(_serverSnapshots);
+        if (_serverSnapshots.Count == 0) return;
+
+        double predictedServerTick = NetworkTickManager.Instance.PredictedPreciseServerTick;
+        double renderTick = predictedServerTick - _delayTicks;
+        if (predictedServerTick <= _serverSnapshots[0].Tick)
+            renderTick = 0;
+
+        //Snap to position
+        if (renderTick <= _serverSnapshots[0].Tick)
+        {
+            _targetVisualPosition = _serverSnapshots[0].Position;
+        }
+        //Interpolate
+        else if (_serverSnapshots.Count >= 2)
+        {
+            (uint, ServerAuthoritativeRodSnapshot) snapshotB;
+            (uint, ServerAuthoritativeRodSnapshot) snapshotA;
+            GetRenderBracketTicks(renderTick, _serverSnapshots, out snapshotB, out snapshotA);
+
+            if (snapshotB.Item1 > snapshotA.Item1)
+            {
+                float t = (float)((renderTick - snapshotA.Item1) / (snapshotB.Item1 - snapshotA.Item1));
+                t = Mathf.Clamp01(t);
+                Vector2 position = Vector2.Lerp(snapshotA.Item2.Position, snapshotB.Item2.Position, t);
+                _targetVisualPosition = position;
+            }
+            else
+            {
+                _targetVisualPosition = snapshotA.Item2.Position;
+            }
+        }
+    }
+
+    [ServerRpc(Delivery = RpcDelivery.Unreliable)]
+    private void SendRodSnapshotServerRpc(ClientRodSnapshot rodSnapshot)
+    {
+        if (!IsServer) return;
 
         if (rodSnapshot.Tick > _lastReceivedTick)
         {
-            _clientRodSnapshots.Add(rodSnapshot);
+            _serverMoveValue = rodSnapshot.InputMoveValue;
             _lastReceivedTick = rodSnapshot.Tick;
         }
     }
 
-    private void GetRenderBracketTicks(double tick, out (uint, RodSnapshot) snapshotB, out (uint, RodSnapshot) snapshotA)
+    [ClientRpc(Delivery = RpcDelivery.Unreliable)]
+    private void SendServerRodSnapshotClientRpc(ServerAuthoritativeRodSnapshot rodSnapshot)
+    {
+        if (IsServer) return;
+
+        if (rodSnapshot.Tick > _lastReceivedHostRodTick && rodSnapshot.ResetId == _resetId)
+        {
+            _serverSnapshots.Add(rodSnapshot);
+            _lastReceivedHostRodTick = rodSnapshot.Tick;
+        }
+    }
+
+    [ClientRpc(Delivery = RpcDelivery.Unreliable)]
+    private void SendClientRodSnapshotClientRpc(ClientAuthoritativeRodSnapshot rodSnapshot)
+    {
+        if (IsServer) return;
+
+        if (_authoritativeMode == RodAuthorityMode.ClientAuthoritative)
+            if (rodSnapshot.ServerTick > _lastReceivedClientRodTick && rodSnapshot.ResetId == _resetId)
+            {
+                _reconciliationSnapshots.Add(rodSnapshot);
+                _lastReceivedClientRodTick = rodSnapshot.ServerTick;
+            }
+    }
+
+    private void GetRenderBracketTicks(double tick, List<ServerAuthoritativeRodSnapshot> rodSnapshots, out (uint, ServerAuthoritativeRodSnapshot) snapshotB, out (uint, ServerAuthoritativeRodSnapshot) snapshotA)
     {
         int index = -1;
-        for (int i = 0; i < _clientRodSnapshots.Count; i++)
+        for (int i = 0; i < rodSnapshots.Count; i++)
         {
-            RodSnapshot snapshot = _clientRodSnapshots[i];
+            ServerAuthoritativeRodSnapshot snapshot = rodSnapshots[i];
             if (snapshot.Tick >= tick)
             {
                 index = i;
@@ -211,15 +360,15 @@ public class RodInputManager : NetworkBehaviour
             }
         }
         if (index == -1)
-            index = _clientRodSnapshots.Count - 1;
-        snapshotB = (_clientRodSnapshots[index].Tick, _clientRodSnapshots[index]);
+            index = rodSnapshots.Count - 1;
+        snapshotB = (rodSnapshots[index].Tick, rodSnapshots[index]);
 
         if (index <= 0)
             index = 1;
-        snapshotA = (_clientRodSnapshots[index - 1].Tick, _clientRodSnapshots[index - 1]);
+        snapshotA = (rodSnapshots[index - 1].Tick, rodSnapshots[index - 1]);
     }
 
-    private void CleanSnapshots(List<RodSnapshot> rodSnapshots)
+    private void CleanSnapshots(List<ServerAuthoritativeRodSnapshot> rodSnapshots)
     {
         if (NetworkTickManager.Instance == null) return;
         if (rodSnapshots.Count == 0) return;
@@ -244,7 +393,7 @@ public class RodInputManager : NetworkBehaviour
 
     void FixedUpdate()
     {
-        if (MatchStateManager.Instance.CurrentMatchState.Value != MatchState.InPlay) return;
+        if (MatchStateManager.Instance == null) return;
         if (_colliderRb == null) return;
         if (_colliderRodBounds == null) return;
 
@@ -252,26 +401,80 @@ public class RodInputManager : NetworkBehaviour
         switch (_authoritativeMode)
         {
             case RodAuthorityMode.ServerAuthoritative:
-                if (!IsServer) return;
-
-                if (IsOwner)
+                if (IsServer)
                 {
-                    ClampPlayerPosition(out clampedX, out minX, out maxX, _colliderRodBounds, _colliderRb);
-                    ApplyPlayerMovement(minX, maxX, clampedX, _clientMoveValue, _colliderRb);
+                    if (MatchStateManager.Instance.CurrentMatchState.Value == MatchState.InPlay)
+                    {
+                        ClampPlayerPosition(out clampedX, out minX, out maxX, _colliderRodBounds, _colliderRb);
+                        if (IsOwner)
+                        {
+                            ApplyPlayerMovement(minX, maxX, clampedX, _clientMoveValue, _colliderRb);
+                        }
+                        else
+                        {
+                            ApplyPlayerMovement(minX, maxX, clampedX, _serverMoveValue, _colliderRb);
+                        }
+                    }
                     _rodPhysicsPosition = _colliderRb.position;
+                    _visualRodGameObject.transform.position = _rodPhysicsPosition;
                 }
                 else
                 {
-                    ClampPlayerPosition(out clampedX, out minX, out maxX, _colliderRodBounds, _colliderRb);
-                    ApplyPlayerMovement(minX, maxX, clampedX, _serverMoveValue, _colliderRb);
-                    _rodPhysicsPosition = _colliderRb.position;
+                    _visualRodGameObject.transform.position = _targetVisualPosition;
                 }
                 break;
+
             case RodAuthorityMode.ClientAuthoritative:
-                if (IsServer || !IsOwner) return;
-                ClampPlayerPosition(out clampedX, out minX, out maxX, _colliderRodBounds, _colliderRb);
-                ApplyPlayerMovement(minX, maxX, clampedX, _clientMoveValue, _colliderRb);
-                _rodPhysicsPosition = _colliderRb.position;
+                if (IsOwner)
+                {
+                    if (_shouldCorrectClientPosition)
+                    {
+                        _colliderRb.position = _targetPhysicsPosition; 
+                        int i = 0;
+                        while (i < _pendingInputs.Count)
+                        {
+                            if (_currentClientTick > _pendingInputs[i].Tick)
+                            {
+                                ClampPlayerPosition(out clampedX, out minX, out maxX, _colliderRodBounds, _colliderRb);
+                                ApplyPlayerMovement(minX, maxX, clampedX, _pendingInputs[i].InputMoveValue, _colliderRb);
+                            }
+                            else
+                            {
+                                break;
+                            }
+                            i++;
+                        }
+                        _shouldCorrectClientPosition = false;
+                    }
+                    if (MatchStateManager.Instance.CurrentMatchState.Value == MatchState.InPlay)
+                    {
+                        ClampPlayerPosition(out clampedX, out minX, out maxX, _colliderRodBounds, _colliderRb);
+                        ApplyPlayerMovement(minX, maxX, clampedX, _clientMoveValue, _colliderRb);               
+                    }
+                    _rodPhysicsPosition = _colliderRb.position;    
+                    _visualRodGameObject.transform.position = _colliderRb.position;
+
+                    if (!IsServer)
+                        _predictedStates.Add(new PredictedState(_currentClientTick, _rodPhysicsPosition));
+                }
+                else
+                {
+                    if (IsServer)
+                    {
+                        if (MatchStateManager.Instance.CurrentMatchState.Value == MatchState.InPlay)
+                        {
+                            ClampPlayerPosition(out clampedX, out minX, out maxX, _colliderRodBounds, _colliderRb);
+                            ApplyPlayerMovement(minX, maxX, clampedX, _serverMoveValue, _colliderRb);
+                        }
+                        _rodPhysicsPosition = _colliderRb.position;
+                        _visualRodGameObject.transform.position = _rodPhysicsPosition;
+                        _lastProcessedTick = _lastReceivedTick; 
+                    }
+                    else
+                    {
+                        _visualRodGameObject.transform.position = _targetVisualPosition;
+                    }
+                }
                 break;
         }
     }
@@ -280,25 +483,25 @@ public class RodInputManager : NetworkBehaviour
     {
         if (_authoritativeMode == RodAuthorityMode.ServerAuthoritative) return;
         if (IsServer || !IsOwner) return;
-        RodSnapshot rodSnapshot = new RodSnapshot(_rodPhysicsPosition, _clientMoveValue, networkTick.TickID);
+        _currentClientTick = networkTick.TickID;
+        float inputMoveValue = _clientMoveValue;
+        ClientRodSnapshot rodSnapshot = new ClientRodSnapshot(inputMoveValue, networkTick.TickID);
         SendRodSnapshotServerRpc(rodSnapshot);
+        InputState inputState = new InputState(networkTick.TickID, inputMoveValue);
+        _pendingInputs.Add(inputState);
     }
 
     private void OnServerNetworkTick(NetworkTickEvent networkTick)
     {
         if (!IsServer) return;
-        RodSnapshot rodSnapshot = new RodSnapshot(_rodPhysicsPosition, _serverMoveValue, networkTick.TickID);
-        SendRodClientRpc(rodSnapshot);
-    }
 
-    [ServerRpc]
-    private void SendRodSnapshotServerRpc(RodSnapshot rodSnapshot)
-    {
-        if (!IsServer) return;
-        if (rodSnapshot.Tick > _lastReceivedTick)
+        ServerAuthoritativeRodSnapshot saRodSnapshot = new ServerAuthoritativeRodSnapshot(_rodPhysicsPosition, networkTick.TickID, _resetId);
+        SendServerRodSnapshotClientRpc(saRodSnapshot);
+
+        if (_authoritativeMode == RodAuthorityMode.ClientAuthoritative)
         {
-            _serverRodSnapshots.Add(rodSnapshot);
-            _lastReceivedTick = rodSnapshot.Tick;
+            ClientAuthoritativeRodSnapshot rodSnapshot = new ClientAuthoritativeRodSnapshot(_rodPhysicsPosition, networkTick.TickID, _lastProcessedTick, _resetId);
+            SendClientRodSnapshotClientRpc(rodSnapshot);
         }
     }
 
@@ -328,31 +531,59 @@ public class RodInputManager : NetworkBehaviour
     }
 
     [ClientRpc]
-    private void ResetRodClientRpc()
+    private void ResetRodClientRpc(uint resetId)
     {
-        if (_visualRb == null) return;
+        if (_visualRodGameObject == null) return;
         if (_colliderRb == null) return;
-        if (IsServer) return;
         _colliderRb.MovePosition(Vector2.zero);
-        _visualRb.MovePosition(Vector2.zero);
+        _visualRodGameObject.transform.position = Vector2.zero;
         _rodPhysicsPosition = Vector2.zero;
+        _targetVisualPosition = Vector2.zero;
+        _targetPhysicsPosition = Vector2.zero;
+        _shouldCorrectClientPosition = false;
+        if (_serverSnapshots != null)
+            _serverSnapshots.Clear();
+        if (_reconciliationSnapshots != null)
+            _reconciliationSnapshots.Clear();
+        if (_predictedStates != null)
+            _predictedStates.Clear();
+        if (_pendingInputs != null)
+            _pendingInputs.Clear();
+        _lastReceivedTick = 0;
+        _clientMoveValue = 0;
+        _serverMoveValue = 0;
+        _currentClientTick = 0;
+        _lastProcessedTick = 0;
+        _lastReceivedClientRodTick = 0;
+        _lastReceivedHostRodTick = 0;
+        _resetId = resetId;
     }
 
     public void ResetRodPosition()
     {
-        if (_visualRb == null) return;
+        if (_visualRodGameObject == null) return;
         if (_colliderRb == null) return;
         if (!IsServer) return;
 
-        if (_authoritativeMode == RodAuthorityMode.ServerAuthoritative)
-        {
-            _colliderRb.MovePosition(Vector2.zero);
-            _visualRb.MovePosition(Vector2.zero);
-            _rodPhysicsPosition = Vector2.zero;
-        }
-        else
-        {
-            ResetRodClientRpc();
-        }
+        _colliderRb.MovePosition(Vector2.zero);
+        _visualRodGameObject.transform.position = Vector2.zero;
+        _rodPhysicsPosition = Vector2.zero;
+        _targetVisualPosition = Vector2.zero;
+        _targetPhysicsPosition = Vector2.zero;
+        if (_serverSnapshots != null)
+            _serverSnapshots.Clear();
+        if (_reconciliationSnapshots != null)
+            _reconciliationSnapshots.Clear();
+        _lastReceivedTick = 0;       
+        _resetId++;
+        _shouldCorrectClientPosition = false;
+        _clientMoveValue = 0;
+        _serverMoveValue = 0;
+        _currentClientTick = 0;
+        _lastProcessedTick = 0;
+        _lastReceivedClientRodTick = 0;
+        _lastReceivedHostRodTick = 0;
+
+        ResetRodClientRpc(_resetId);
     }
 }

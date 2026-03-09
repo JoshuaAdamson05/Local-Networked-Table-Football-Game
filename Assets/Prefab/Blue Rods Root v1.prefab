@@ -2012,7 +2012,7 @@ GameObject:
   - component: {fileID: 5620554661858101643}
   - component: {fileID: 3768201609483894665}
   m_Layer: 0
-  m_Name: Blue Rods Root
+  m_Name: Blue Rods Root v1
   m_TagString: BlueRods
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
