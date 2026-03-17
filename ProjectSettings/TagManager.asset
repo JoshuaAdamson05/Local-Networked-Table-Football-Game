@@ -7,6 +7,12 @@ TagManager:
   - PitchBounds
   - ClientGoal
   - HostGoal
+  - RedRods
+  - BlueRods
+  - LobbyOptions
+  - EnterLobbyName
+  - ClientNameText
+  - ClientReadyStatusText
   layers:
   - Default
   - TransparentFX
