@@ -1458,9 +1458,9 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 249dbf1d959d5e24084e76966fb9689c, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::ClientLobbyListener
-  _gameProtocolVersion: 1
+  _gameProtocolVersion: 2
   _listenerPort: 6777
-  _listenTimeSeconds: 3
+  _listenTimeSeconds: 10
   _gameID: TABLEFOOTBALL_LAN
   _discoveryMessageType: FIND_LOBBY
 --- !u!4 &1165644502

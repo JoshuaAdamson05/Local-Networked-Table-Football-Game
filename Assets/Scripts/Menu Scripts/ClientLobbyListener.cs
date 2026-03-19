@@ -41,9 +41,9 @@ public struct DiscoveryMessage
 public class ClientLobbyListener : MonoBehaviour
 {
     private bool _isListening;
-    [SerializeField] private byte _gameProtocolVersion = 1;
+    [SerializeField] private byte _gameProtocolVersion = 2;
     [SerializeField] private ushort _listenerPort = 6777;
-    [SerializeField] private int _listenTimeSeconds = 3;
+    [SerializeField] private int _listenTimeSeconds = 10;
     [SerializeField] private string _gameID = "TABLEFOOTBALL_LAN";
     [SerializeField] private string _discoveryMessageType = "FIND_LOBBY";
     public static event Action<List<LobbyDetailsMessage>> OnLobbyDetailsUpdated;
@@ -88,6 +88,8 @@ public class ClientLobbyListener : MonoBehaviour
 
     public void StartLobbyDiscovery()
     {
+        _udpClient = new UdpClient(0);
+        _udpClient.EnableBroadcast = true;
         SendDiscoveryMessage();
         OnSearchingAction?.Invoke(true);
         _lobbyDetails.Clear();
@@ -96,16 +98,17 @@ public class ClientLobbyListener : MonoBehaviour
 
     private void SendDiscoveryMessage()
     {
-        _udpClient = new UdpClient(0);
-        _udpClient.EnableBroadcast = true;
         try
         {
+            UdpClient client = _udpClient;
+            if (client == null) return;
+
             DiscoveryMessage message = new DiscoveryMessage(_discoveryMessageType, _gameID, _gameProtocolVersion);
             string jsonMessage = JsonUtility.ToJson(message);
             byte[] sendBytes = Encoding.UTF8.GetBytes(jsonMessage);
             IPAddress address = GetSubnetBroadcastAddress();
             Debug.Log(address.ToString());
-            _udpClient.Send(sendBytes, sendBytes.Length, address.ToString(), _listenerPort);
+            client.Send(sendBytes, sendBytes.Length, address.ToString(), _listenerPort);
             _remainingListeningTime = _listenTimeSeconds;
             _isListening = true;
             _listenerLoop = UdpListenerLoop();
@@ -118,16 +121,27 @@ public class ClientLobbyListener : MonoBehaviour
 
     private async Task UdpListenerLoop()
     {
-        while (_isListening)
+        try
         {
-            UdpReceiveResult result = await _udpClient.ReceiveAsync();
-            byte[] receivedBytes = result.Buffer;
-            string receivedData = Encoding.UTF8.GetString(receivedBytes);
-            Debug.Log(receivedData);
-            LobbyDetailsMessage receivedMessage = JsonUtility.FromJson<LobbyDetailsMessage>(receivedData);
-            Debug.Log($"Lobby Name: {receivedMessage.LobbyName}, Lobby IP: {receivedMessage.IPAddress}, Lobby Port: {receivedMessage.GameLobbyPort}");
-            _lobbyDetails.Add(receivedMessage);
-            OnLobbyDetailsUpdated?.Invoke(_lobbyDetails);
+            while (_isListening)
+            {
+                UdpClient client = _udpClient;
+                if (client == null) break;
+
+                UdpReceiveResult result = await client.ReceiveAsync();
+                if (!_isListening) break;
+                byte[] receivedBytes = result.Buffer;
+                string receivedData = Encoding.UTF8.GetString(receivedBytes);
+                Debug.Log(receivedData);
+                LobbyDetailsMessage receivedMessage = JsonUtility.FromJson<LobbyDetailsMessage>(receivedData);
+                Debug.Log($"Lobby Name: {receivedMessage.LobbyName}, Lobby IP: {receivedMessage.IPAddress}, Lobby Port: {receivedMessage.GameLobbyPort}");
+                _lobbyDetails.Add(receivedMessage);
+                OnLobbyDetailsUpdated?.Invoke(_lobbyDetails);
+            }
+        }
+        catch (Exception ex)
+        {
+            Debug.LogException(ex);
         }
     }
 

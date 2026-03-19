@@ -1,4 +1,5 @@
 using TMPro;
+using Unity.Collections;
 using Unity.Netcode;
 using Unity.Networking.Transport.Error;
 using Unity.VisualScripting;
@@ -9,8 +10,7 @@ using UnityEngine.UI;
 public class GameLobbyUIManager : NetworkBehaviour
 { 
     public NetworkVariable<bool> IsHostReady = new NetworkVariable<bool>(false, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Server);
-    public NetworkVariable<Color> ServerAuthorityButtonColour = new NetworkVariable<Color>(Color.red, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Server);
-    public NetworkVariable<Color> ClientAuthorityButtonColour = new NetworkVariable<Color>(Color.green, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Server);
+    public NetworkVariable<FixedString64Bytes> AuthorityModeString = new NetworkVariable<FixedString64Bytes>("Client Authority", NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Server);
     public NetworkVariable<bool> IsClientReady = new NetworkVariable<bool>(false, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Server);
     [SerializeField] private GameObject _networkedLobbyManager;
     [SerializeField] private GameObject _gameLobbyCanvas;
@@ -19,8 +19,10 @@ public class GameLobbyUIManager : NetworkBehaviour
     [SerializeField] private TextMeshProUGUI _hostNameText;
     [SerializeField] private TextMeshProUGUI _lobbyTitleText;
     [SerializeField] private TextMeshProUGUI _hostReadyStatusText;
+    [SerializeField] private GameObject _clientAuthorityImage;
     private TextMeshProUGUI _clientObjectNameText;
     private TextMeshProUGUI _clientObjectReadyStatusText;
+    private TextMeshProUGUI _clientAuthorityText;
     [SerializeField] private Button _clientAuthorityButton;
     [SerializeField] private Button _serverAuthorityButton;
     private GameObject _activeClientObject;
@@ -38,26 +40,34 @@ public class GameLobbyUIManager : NetworkBehaviour
 
             IsHostReady.OnValueChanged += OnHostReadyToggle;
             IsClientReady.OnValueChanged += OnClientReadyToggle;
-            ServerAuthorityButtonColour.OnValueChanged += OnServerAuthorityColourChanged;
-            ClientAuthorityButtonColour.OnValueChanged += OnClientAuthorityColourChanged;
+            AuthorityModeString.OnValueChanged += OnAuthorityStringChanged;
 
             if (_clientAuthorityButton != null)
             {
-                _clientAuthorityButton.onClick.RemoveAllListeners();
-                _clientAuthorityButton.interactable = false;
-                SetButtonColour(_clientAuthorityButton, ClientAuthorityButtonColour.Value);
+                _clientAuthorityButton.gameObject.SetActive(false);
             }
             else
                 Debug.LogError("Client authority button missing!");
 
             if (_serverAuthorityButton != null)
             {
-                _serverAuthorityButton.onClick.RemoveAllListeners();
-                _serverAuthorityButton.interactable = false;
-                SetButtonColour(_serverAuthorityButton, ServerAuthorityButtonColour.Value);
+                _serverAuthorityButton.gameObject.SetActive(false);
             }
             else
                 Debug.LogError("Server authority button missing");
+
+            if (_clientAuthorityImage != null)
+            {
+                _clientAuthorityImage.gameObject.SetActive(true);
+                _clientAuthorityText = _clientAuthorityImage.GetComponentInChildren<TextMeshProUGUI>();
+            }
+            else
+                Debug.LogError("Client Authority image missing!");
+
+            if (_clientAuthorityText == null)
+            {
+                Debug.LogError("Cannot find client authority text!");
+            }
 
             ApplyHostReadyStatus(IsHostReady.Value);
 
@@ -121,8 +131,7 @@ public class GameLobbyUIManager : NetworkBehaviour
         if (!IsServer)
         {
             IsHostReady.OnValueChanged -= OnHostReadyToggle;
-            ServerAuthorityButtonColour.OnValueChanged -= OnServerAuthorityColourChanged;
-            ClientAuthorityButtonColour.OnValueChanged -= OnClientAuthorityColourChanged;
+            AuthorityModeString.OnValueChanged -= OnAuthorityStringChanged;
         }
         else
         {
@@ -364,21 +373,12 @@ public class GameLobbyUIManager : NetworkBehaviour
         }
     }
 
-    private void OnClientAuthorityColourChanged(Color oldColour, Color newColour)
-    {
-        if (_clientAuthorityButton != null)
-            SetButtonColour(_clientAuthorityButton, newColour);
-    }
-
     public void SetServerAuthority()
     {
-        SetAuthorityMode(RodAuthorityMode.ServerAuthoritative);
-    }
-
-    private void OnServerAuthorityColourChanged(Color oldColour, Color newColour)
-    {
-        if (_serverAuthorityButton != null)
-            SetButtonColour(_serverAuthorityButton, newColour);
+        if (IsServer)
+        {
+            SetAuthorityMode(RodAuthorityMode.ServerAuthoritative);
+        }
     }
 
     private void SetAuthorityMode(RodAuthorityMode rodAuthorityMode)
@@ -393,16 +393,14 @@ public class GameLobbyUIManager : NetworkBehaviour
             {
                 case RodAuthorityMode.ServerAuthoritative:
                     SetButtonColour(_serverAuthorityButton, Color.green);
-                    ServerAuthorityButtonColour.Value = Color.green;
                     SetButtonColour(_clientAuthorityButton, Color.red);
-                    ClientAuthorityButtonColour.Value = Color.red;
+                    AuthorityModeString.Value = "Server Authority";
                     break;
 
                 case RodAuthorityMode.ClientAuthoritative:
                     SetButtonColour(_clientAuthorityButton, Color.green);
-                    ClientAuthorityButtonColour.Value = Color.green;
                     SetButtonColour(_serverAuthorityButton, Color.red);
-                    ServerAuthorityButtonColour.Value = Color.red;
+                    AuthorityModeString.Value = "Client Authority";
                     break;
             }
         }
@@ -410,19 +408,23 @@ public class GameLobbyUIManager : NetworkBehaviour
             Debug.LogError("Cannot toggle authority mode!");
     }   
     
+    private void OnAuthorityStringChanged(FixedString64Bytes oldString, FixedString64Bytes newString)
+    {
+        if (_clientAuthorityText != null)
+        {
+            _clientAuthorityText.text = AuthorityModeString.Value.ToString();
+        }
+        else Debug.LogError("Client authority text is missing!");
+    }
+
     private void SetButtonColour(Button button, Color colour)
     {
+        if (!IsServer) return;
+
         ColorBlock cb = button.colors;
-        if (IsServer)
-        {
-            cb.normalColor = colour;
-            cb.pressedColor = colour;
-            cb.selectedColor = colour;
-        }
-        else
-        {
-            cb.disabledColor = colour;
-        }
+        cb.normalColor = colour;
+        cb.pressedColor = colour;
+        cb.selectedColor = colour;
         button.colors = cb;
     }
 }

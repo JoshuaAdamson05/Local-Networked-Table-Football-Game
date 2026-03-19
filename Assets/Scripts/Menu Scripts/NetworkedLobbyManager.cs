@@ -14,7 +14,7 @@ public class NetworkedLobbyManager : MonoBehaviour
     [SerializeField] private ushort _listenerPort = 6777;
     [SerializeField] private string _gameID = "TABLEFOOTBALL_LAN";
     [SerializeField] private string _discoveryMessageType = "FIND_LOBBY";
-    [SerializeField] private byte _gameProtocolVersion = 1;
+    [SerializeField] private byte _gameProtocolVersion = 2;
     public static NetworkedLobbyManager Instance;
     private UdpClient _udpClient;
     private Task _listenerLoop;
@@ -69,6 +69,8 @@ public class NetworkedLobbyManager : MonoBehaviour
 
     public void StartListening()
     {
+        _udpClient = new UdpClient(_listenerPort);
+        _udpClient.EnableBroadcast = true;
         _isListening = true;
         _listenerLoop = UdpListenerLoop();
         Debug.Log("UDP Client listener started!");
@@ -76,21 +78,39 @@ public class NetworkedLobbyManager : MonoBehaviour
 
     private async Task UdpListenerLoop()
     {
-        _udpClient = new UdpClient(_listenerPort);
-        _udpClient.EnableBroadcast = true;
-        while (_isListening)
+        try
         {
-            UdpReceiveResult result = await _udpClient.ReceiveAsync();
-            byte[] receivedBytes = result.Buffer;
-            string receivedData = Encoding.UTF8.GetString(receivedBytes);
-            DiscoveryMessage receivedMessage = JsonUtility.FromJson<DiscoveryMessage>(receivedData);
-            Debug.Log("Received a message!");
-            IPEndPoint endpoint = result.RemoteEndPoint;
-
-            if (receivedMessage.MessageType == _discoveryMessageType
-                && receivedMessage.ProtocolVersion == _gameProtocolVersion
-                && receivedMessage.GameId == _gameID)
+            while (_isListening)
             {
+                UdpClient client = _udpClient;
+                if (client == null) break;
+
+                UdpReceiveResult result = await client.ReceiveAsync();
+                if (!_isListening) break;
+                byte[] receivedBytes = result.Buffer;
+                string receivedData = Encoding.UTF8.GetString(receivedBytes);
+                DiscoveryMessage receivedMessage = JsonUtility.FromJson<DiscoveryMessage>(receivedData);
+                Debug.Log("Received a message!");
+                IPEndPoint endpoint = result.RemoteEndPoint;
+
+                if (receivedMessage.MessageType != _discoveryMessageType)
+                {
+                    Debug.LogError("Received message did not match expected message type!");
+                    return;
+                } 
+                
+                if (receivedMessage.ProtocolVersion != _gameProtocolVersion)
+                {
+                    Debug.LogError("Messaging client game protocol version does not match host game protocol version!");
+                    return;
+                }
+
+                if (receivedMessage.GameId != _gameID)
+                {
+                    Debug.LogError("Messaging client game ID does not match host game ID!");
+                    return;
+                }
+
                 if (PersistentLobbyManager.Instance == null)
                 {
                     Debug.LogError("Persistent Lobby manager instance missing!");
@@ -105,12 +125,15 @@ public class NetworkedLobbyManager : MonoBehaviour
                     _udpClient.Send(receivedBytes, receivedBytes.Length, endpoint);
                     Debug.Log("Sent lobby details to a potential client!");
                 }
-                catch(Exception ex)
+                catch (Exception ex)
                 {
-                    Debug.LogException(ex); 
+                    Debug.LogException(ex);
                 }
             }
-            else Debug.LogError("Received message does not match expected message structure / details");
+        }
+        catch(Exception ex)
+        {
+            Debug.LogException(ex);
         }
     }
 }
