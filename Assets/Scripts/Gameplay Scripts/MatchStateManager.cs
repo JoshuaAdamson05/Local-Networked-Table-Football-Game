@@ -7,16 +7,19 @@ public enum MatchState
     InPlay,
     GoalScored,
     KickOff,
-    GameOver
+    GameOver,
+    ConnectingToLobby
 }
 
 public class MatchStateManager : NetworkBehaviour
 {
-    [SerializeField] private float _goalFreezeDuration = 3.0f;
-    [SerializeField] private float _kickOffDuration = 3.0f;
-    private int _lastProcessedGoalID = -1;
     private ushort _nextSetupKickOffID;
     private ushort _nextKickOffID;
+    [SerializeField] private float _goalFreezeDuration = 3.0f;
+    [SerializeField] private float _kickOffDuration = 3.0f;
+    [SerializeField] private float _gameLobbyConnectionWaitSeconds = 5f;
+    private int _lastProcessedGoalID = -1;
+
     private TeamEnums _lastKickingOffTeam = TeamEnums.None;
 
     public static MatchStateManager Instance { get; private set; }
@@ -142,7 +145,6 @@ public class MatchStateManager : NetworkBehaviour
     private void Update()
     {
         if (!IsServer) return;
-        if (CurrentMatchState.Value == MatchState.GameOver) return;
 
         double currentTime = NetworkManager.Singleton.ServerTime.Time;
 
@@ -159,6 +161,7 @@ public class MatchStateManager : NetworkBehaviour
         {
             CurrentMatchState.Value = MatchState.GameOver;
             Debug.Log("Match time ended. Transitioning to GameOver phase.");
+            PhaseEndTime.Value = currentTime + _gameLobbyConnectionWaitSeconds;
             return;
         }
 
@@ -181,6 +184,14 @@ public class MatchStateManager : NetworkBehaviour
                 Debug.Log($"Goal scored! Transitioning to KickOff phase.");  
                 PhaseEndTime.Value = currentTime + _kickOffDuration;
                 RegisterKickOffSetUp();
+                break;
+            case MatchState.GameOver:
+                CurrentMatchState.Value = MatchState.ConnectingToLobby;
+                if (NetworkManager.Singleton != null)
+                {
+                    Debug.Log("Switching Scenes!");
+                    NetworkManager.Singleton.SceneManager.LoadScene("GameLobbyScene", UnityEngine.SceneManagement.LoadSceneMode.Single);
+                }
                 break;
         }
     }

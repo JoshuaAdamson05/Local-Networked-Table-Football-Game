@@ -11,12 +11,12 @@ public class LobbyOptionsSceneManager : MonoBehaviour
 
     public void AttemptToCreateLobby()
     {
-        if (PersistentLobbyManager.Instance == null) return;
+        if (PersistentLobbySessionManager.Instance == null) return;
 
-        if (PersistentLobbyManager.Instance.HostSetLobbyName())
+        if (PersistentLobbySessionManager.Instance.HostSetLobbyName())
         {
-            PersistentLobbyManager.Instance.SetHost(true);
-            PersistentLobbyManager.Instance.SetLobbyIP();
+            PersistentLobbySessionManager.Instance.SetHost(true);
+            PersistentLobbySessionManager.Instance.SetLobbyIP();
             SceneManager.LoadScene("GameLobbyScene");
         }
         else
@@ -27,8 +27,8 @@ public class LobbyOptionsSceneManager : MonoBehaviour
 
     public void GoToJoinLobbyScene()
     {
-        if (PersistentLobbyManager.Instance == null) return;
-        PersistentLobbyManager.Instance.SetHost(false);
+        if (PersistentLobbySessionManager.Instance == null) return;
+        PersistentLobbySessionManager.Instance.SetHost(false);
         SceneManager.LoadScene("ViewAvailableLobbiesScene");
     }
 
@@ -52,7 +52,7 @@ public class LobbyOptionsSceneManager : MonoBehaviour
 
     public void SetLobbyOptionsCanvas()
     {
-        if (PersistentLobbyManager.Instance == null) return;
+        if (PersistentLobbySessionManager.Instance == null) return;
 
         if (_enterPlayerNameCanvas == null)
         {
@@ -70,7 +70,7 @@ public class LobbyOptionsSceneManager : MonoBehaviour
         if (playerNameInput != null)
         {
             string inputText = playerNameInput.text;
-            if (PersistentLobbyManager.Instance.SetLocalPlayerName(inputText))
+            if (PersistentLobbySessionManager.Instance.SetLocalPlayerName(inputText))
             {
                 _lobbyOptionsCanvas.SetActive(true);
                 _enterPlayerNameCanvas.SetActive(false);

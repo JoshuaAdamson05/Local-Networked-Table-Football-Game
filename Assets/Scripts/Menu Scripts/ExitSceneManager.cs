@@ -6,9 +6,9 @@ public class ExitSceneManager : MonoBehaviour
 {
     public void ExitScene(string sceneToLoad)
     {
-        if (PersistentLobbyManager.Instance != null)
+        if (PersistentLobbySessionManager.Instance != null)
         {
-            Destroy(PersistentLobbyManager.Instance.gameObject);
+            Destroy(PersistentLobbySessionManager.Instance.gameObject);
         }
 
         if (NetworkManager.Singleton != null)

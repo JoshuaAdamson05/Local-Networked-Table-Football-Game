@@ -78,7 +78,7 @@ public class RodInputManager : NetworkBehaviour
     [SerializeField] private float _moveSpeed;
     [SerializeField] private GameObject _visualRodGameObject;
     [SerializeField] private GameObject _colliderRodGameObject;
-    [SerializeField] private RodAuthorityMode _authoritativeMode = RodAuthorityMode.ServerAuthoritative;
+    [SerializeField] private NetworkVariable<RodAuthorityMode> _authoritativeMode = new NetworkVariable<RodAuthorityMode>(RodAuthorityMode.ClientAuthoritative, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Server);
     [SerializeField] private double _bufferWindowSeconds = 0.5;
     [SerializeField] private int _interpolationDelayMs = 100;
     [SerializeField] float _maxCorrectionDistance = 0.15f;
@@ -210,7 +210,7 @@ public class RodInputManager : NetworkBehaviour
 
         if (!IsServer)
         {
-            if (_authoritativeMode == RodAuthorityMode.ServerAuthoritative)
+            if (_authoritativeMode.Value == RodAuthorityMode.ServerAuthoritative)
             {
                 if (IsOwner)
                     SubmitMoveRequestServerRpc(_clientMoveValue);
@@ -339,7 +339,7 @@ public class RodInputManager : NetworkBehaviour
     {
         if (IsServer) return;
 
-        if (_authoritativeMode == RodAuthorityMode.ClientAuthoritative)
+        if (_authoritativeMode.Value == RodAuthorityMode.ClientAuthoritative)
             if (rodSnapshot.ServerTick > _lastReceivedClientRodTick && rodSnapshot.ResetId == _resetId)
             {
                 _reconciliationSnapshots.Add(rodSnapshot);
@@ -398,7 +398,7 @@ public class RodInputManager : NetworkBehaviour
         if (_colliderRodBounds == null) return;
 
         float clampedX, minX, maxX;
-        switch (_authoritativeMode)
+        switch (_authoritativeMode.Value)
         {
             case RodAuthorityMode.ServerAuthoritative:
                 if (IsServer)
@@ -481,7 +481,7 @@ public class RodInputManager : NetworkBehaviour
 
     private void OnClientNetworkTick(NetworkTickEvent networkTick)
     {
-        if (_authoritativeMode == RodAuthorityMode.ServerAuthoritative) return;
+        if (_authoritativeMode.Value == RodAuthorityMode.ServerAuthoritative) return;
         if (IsServer || !IsOwner) return;
         _currentClientTick = networkTick.TickID;
         float inputMoveValue = _clientMoveValue;
@@ -498,7 +498,7 @@ public class RodInputManager : NetworkBehaviour
         ServerAuthoritativeRodSnapshot saRodSnapshot = new ServerAuthoritativeRodSnapshot(_rodPhysicsPosition, networkTick.TickID, _resetId);
         SendServerRodSnapshotClientRpc(saRodSnapshot);
 
-        if (_authoritativeMode == RodAuthorityMode.ClientAuthoritative)
+        if (_authoritativeMode.Value == RodAuthorityMode.ClientAuthoritative)
         {
             ClientAuthoritativeRodSnapshot rodSnapshot = new ClientAuthoritativeRodSnapshot(_rodPhysicsPosition, networkTick.TickID, _lastProcessedTick, _resetId);
             SendClientRodSnapshotClientRpc(rodSnapshot);
@@ -585,5 +585,10 @@ public class RodInputManager : NetworkBehaviour
         _lastReceivedHostRodTick = 0;
 
         ResetRodClientRpc(_resetId);
+    }
+
+    public void SetAuthorityMode(RodAuthorityMode rodAuthorityMode)
+    {
+        _authoritativeMode.Value = rodAuthorityMode;
     }
 }

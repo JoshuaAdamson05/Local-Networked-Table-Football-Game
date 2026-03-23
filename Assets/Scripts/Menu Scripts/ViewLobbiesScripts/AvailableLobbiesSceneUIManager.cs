@@ -57,14 +57,14 @@ public class AvailableLobbiesSceneUIManager : MonoBehaviour
 
                 lobbyObjectButton.onClick.AddListener(() =>
                 {
-                    if (PersistentLobbyManager.Instance == null)
+                    if (PersistentLobbySessionManager.Instance == null)
                     {
                         Debug.LogError("Persistent lobby manager instance missing!");
                         return;
                     }
 
-                    PersistentLobbyManager.Instance.SetLobbyIP(lobbyDetailsMessage.IPAddress);
-                    PersistentLobbyManager.Instance.SetGamePort(lobbyDetailsMessage.GameLobbyPort);
+                    PersistentLobbySessionManager.Instance.SetLobbyIP(lobbyDetailsMessage.IPAddress);
+                    PersistentLobbySessionManager.Instance.SetGamePort(lobbyDetailsMessage.GameLobbyPort);
                     UnityTransport unityTransport = NetworkManager.Singleton.GetComponent<UnityTransport>();
                     unityTransport.ConnectionData.Address = lobbyDetailsMessage.IPAddress;
                     unityTransport.ConnectionData.Port = lobbyDetailsMessage.GameLobbyPort;

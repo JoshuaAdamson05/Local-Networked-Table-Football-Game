@@ -4,7 +4,7 @@ using System.Net.Sockets;
 using TMPro;
 using UnityEngine;
 
-public class PersistentLobbyManager : MonoBehaviour
+public class PersistentLobbySessionManager : MonoBehaviour
 {
     public bool IsHost { get; private set; } = false;
     public string LobbyName { get; private set; }
@@ -14,7 +14,7 @@ public class PersistentLobbyManager : MonoBehaviour
     public RodAuthorityMode AuthorityMode { get; private set; } = RodAuthorityMode.ClientAuthoritative;
     public ushort GamePort { get; private set; }
 
-    public static PersistentLobbyManager Instance;
+    public static PersistentLobbySessionManager Instance;
 
     private void Awake()
     {
