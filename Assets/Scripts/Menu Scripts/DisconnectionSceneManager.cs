@@ -23,6 +23,7 @@ public class DisconnectionSceneManager : MonoBehaviour
 
         _disconnectionReasonText.text = PersistentDisconnectionManager.Instance.DisconnectionReason;
         DestroyNetworkManager();
+        DestroyPersistentLobbySessionManager();
     }
 
     private void DestroyNetworkManager()
@@ -34,6 +35,16 @@ public class DisconnectionSceneManager : MonoBehaviour
         }
         else
             Debug.LogWarning("Network manager instance not found!");
+    }
+
+    private void DestroyPersistentLobbySessionManager()
+    {
+        if (PersistentLobbySessionManager.Instance != null)
+        {
+            Destroy(PersistentLobbySessionManager.Instance.gameObject);
+        }
+        else
+            Debug.LogWarning("Persistent lobby session manager not found!");
     }
 
     public void ReturnToMainMenu()

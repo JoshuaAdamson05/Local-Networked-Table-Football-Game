@@ -3,29 +3,51 @@ using System.Net.NetworkInformation;
 using System.Net.Sockets;
 using TMPro;
 using UnityEngine;
+using Unity.Netcode;
+using UnityEngine.SceneManagement;
 
-public class PersistentLobbySessionManager : MonoBehaviour
-{
-    public bool IsHost { get; private set; } = false;
+public class PersistentLobbySessionManager : NetworkBehaviour
+{  
+    private bool _hasClientChosenToLeave = false;
+    private bool _hasHostChosenToLeave = false;
+    public new bool IsHost { get; private set; } = false;
     public string LobbyName { get; private set; }
     public string LocalPlayerName { get; private set; }
     public string ConnectedPlayerName { get; private set; }
     public string LobbyIP { get; private set; }
     public RodAuthorityMode AuthorityMode { get; private set; } = RodAuthorityMode.ClientAuthoritative;
     public ushort GamePort { get; private set; }
-
+    [SerializeField] private GameObject _persistentDisconnectionManagerPrefab;
     public static PersistentLobbySessionManager Instance;
 
     private void Awake()
     {
         if (Instance != null)
         {
-            Debug.Log("Destroying existing instance of LobbyManager"); 
+            Debug.Log("Destroying existing instance of PersistentLobbySessionManager"); 
             Destroy(Instance.gameObject);
         }
 
         Instance = this;
         DontDestroyOnLoad(Instance);
+    }
+
+    public override void OnNetworkSpawn()
+    {
+        NetworkManager.Singleton.OnClientDisconnectCallback += OnClientDisconnected;
+        if (IsServer)
+        {
+            NetworkManager.Singleton.OnClientConnectedCallback += OnClientConnected;
+        }
+    }
+
+    public override void OnNetworkDespawn()
+    {
+        NetworkManager.Singleton.OnClientDisconnectCallback -= OnClientDisconnected;
+        if (IsServer)
+        {
+            NetworkManager.Singleton.OnClientConnectedCallback -= OnClientConnected;
+        }
     }
 
     public void SetHost(bool isHost)
@@ -67,7 +89,8 @@ public class PersistentLobbySessionManager : MonoBehaviour
 
     public void SetLobbyIP()
     {
-        LobbyIP = GetLocalIPAddress();
+        //LobbyIP = GetLocalIPAddress();
+        LobbyIP = "192.168.1.120";
     }
 
     public void SetLobbyIP(string ip)
@@ -145,5 +168,91 @@ public class PersistentLobbySessionManager : MonoBehaviour
         }
 
         return "127.0.0.1";
+    }   
+    
+    public void ExitGameLobby()
+    {
+        if (IsServer)
+        {
+            DisconnectConnectedClient("Host has Left!");
+            _hasHostChosenToLeave = true;
+        }
+        else _hasClientChosenToLeave = true;
+
+        SceneManager.LoadScene("MainMenuScene");
+    }   
+
+    private void DisconnectConnectedClient(string disconnectionReason)
+    {
+        if (NetworkManager.Singleton != null)
+        {
+            if (NetworkManager.Singleton.ConnectedClients.Count > 1)
+            {
+                ulong clientId = NetworkManager.Singleton.ConnectedClientsIds[1];
+                NetworkManager.Singleton.DisconnectClient(clientId, disconnectionReason);    
+                Debug.Log("Kicking connected client!");
+            }
+        }
+    }
+    
+    private void OnClientDisconnected(ulong clientId)
+    {
+        if (IsServer)
+        { 
+            if (clientId == NetworkManager.Singleton.LocalClientId) return;
+            switch (SceneManager.GetActiveScene().name)
+            {
+                case "GameLobbyScene":
+                    if (NetworkedLobbyManager.Instance != null)
+                    {
+                        NetworkedLobbyManager.Instance.StartListening();
+                    }
+                    break;
+
+                case "GameScene":
+                    if (_hasHostChosenToLeave) return;
+                    Instantiate(_persistentDisconnectionManagerPrefab);
+                    if (PersistentDisconnectionManager.Instance != null)
+                    {
+                        PersistentDisconnectionManager.Instance.SetDisconnectionReason("Client has exited the game!");
+                        SceneManager.LoadScene("DisconnectedScene");
+                    }
+                    break;
+            }
+        }
+        else if (!_hasClientChosenToLeave)
+        {
+            if (clientId != NetworkManager.Singleton.LocalClientId) return; 
+            if (_persistentDisconnectionManagerPrefab != null)
+                Instantiate(_persistentDisconnectionManagerPrefab);
+            else Debug.LogError("Persistent disconnection manager prefab is missing!");
+            if (PersistentDisconnectionManager.Instance != null)
+                PersistentDisconnectionManager.Instance.SetDisconnectionReason(NetworkManager.Singleton.DisconnectReason);    
+            SceneManager.LoadScene("DisconnectedScene");
+        }    
+    }
+
+    private void OnClientConnected(ulong clientId)
+    {
+        if (IsServer)
+        {
+            if (clientId == NetworkManager.Singleton.LocalClientId)
+                return;
+
+            if (NetworkManager.Singleton.ConnectedClientsIds.Count > 2)
+            {
+                Debug.LogWarning("Maximum of 2 players reached. No more players can connect!");
+                NetworkManager.Singleton.DisconnectClient(clientId, "Maximum number of players reached!");
+                return;
+            }
+
+            _hasClientChosenToLeave = false;
+            if (SceneManager.GetActiveScene().name != "GameLobbyScene") return;
+
+            if (NetworkedLobbyManager.Instance != null)
+            {
+                NetworkedLobbyManager.Instance.StopListening();
+            }
+        }
     }
 }

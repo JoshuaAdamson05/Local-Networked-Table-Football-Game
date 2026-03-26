@@ -12,16 +12,20 @@ public enum RodAuthorityMode
 
 public struct ServerAuthoritativeRodSnapshot : INetworkSerializable
 {
+    public const float RodPositionScale = 500f;
+
     public ServerAuthoritativeRodSnapshot(Vector2 position, uint tick, uint resetId)
     {
-        Position = position;
+        Position = Quantize(position.x, RodPositionScale);
         Tick = tick;
         ResetId = resetId;
     }
 
-    public Vector2 Position;
+    public short Position;
     public uint Tick;
     public uint ResetId;
+
+    public float DequantizedPosition => Position / RodPositionScale;
 
     public void NetworkSerialize<T>(BufferSerializer<T> serializer) where T : IReaderWriter
     {
@@ -29,21 +33,31 @@ public struct ServerAuthoritativeRodSnapshot : INetworkSerializable
         serializer.SerializeValue(ref Tick);
         serializer.SerializeValue(ref ResetId);
     }
+
+    private static short Quantize(float value, float scale)
+    {
+        int scaled = Mathf.RoundToInt(value * scale);
+        return (short)Mathf.Clamp(scaled, short.MinValue, short.MaxValue);
+    }
 }
 public struct ClientAuthoritativeRodSnapshot : INetworkSerializable
 {
+    public const float RodPositionScale = 500f;
+
     public ClientAuthoritativeRodSnapshot(Vector2 position, uint serverTick, uint processedClientTick, uint resetID)
     {
-        Position = position;
+        Position = Quantize(position.x, RodPositionScale);
         ServerTick = serverTick;
         ProcessedClientTick = processedClientTick;
         ResetId = resetID;
     }
 
-    public Vector2 Position;
+    public short Position;
     public uint ServerTick;
     public uint ProcessedClientTick;
     public uint ResetId;
+
+    public float DequantizedPosition => Position / RodPositionScale;
 
     public void NetworkSerialize<T>(BufferSerializer<T> serializer) where T : IReaderWriter
     {
@@ -52,23 +66,35 @@ public struct ClientAuthoritativeRodSnapshot : INetworkSerializable
         serializer.SerializeValue(ref ProcessedClientTick);
         serializer.SerializeValue(ref ResetId);
     }
+
+    private static short Quantize(float value, float scale)
+    {
+        int scaled = Mathf.RoundToInt(value * scale);
+        return (short)Mathf.Clamp(scaled, short.MinValue, short.MaxValue);
+    }
 }
 
-public struct ClientRodSnapshot : INetworkSerializable
+public struct ClientInputSnapshot : INetworkSerializable
 {
-    public ClientRodSnapshot(float inputMoveValue, uint tick)
+    public ClientInputSnapshot(float inputMoveValue, uint tick)
     {
-        InputMoveValue = inputMoveValue;
+        InputMoveValue = Quantize(inputMoveValue);
         Tick = tick;
     }
 
-    public float InputMoveValue;
+    public sbyte InputMoveValue;
     public uint Tick;
+    public float DequantizeInputMoveValue => InputMoveValue / 127f;
 
     public void NetworkSerialize<T>(BufferSerializer<T> serializer) where T: IReaderWriter
     {
         serializer.SerializeValue(ref InputMoveValue);
         serializer.SerializeValue(ref Tick);
+    }
+
+    private static sbyte Quantize(float value)
+    {
+        return (sbyte)Mathf.RoundToInt(value * 127f);
     }
 }
 
@@ -239,11 +265,11 @@ public class RodInputManager : NetworkBehaviour
                             {
                                 PredictedState predictedState = _predictedStates[0];
 
-                                float errorDistance = Vector2.Distance(predictedState.Position, snapshot.Position);
+                                float errorDistance = Vector2.Distance(predictedState.Position, new Vector2(snapshot.DequantizedPosition, 0));
 
                                 if (errorDistance >= _maxCorrectionDistance)
                                 {
-                                    _targetPhysicsPosition = snapshot.Position;
+                                    _targetPhysicsPosition = new Vector2(snapshot.DequantizedPosition, 0);
                                     _shouldCorrectClientPosition = true;
                                 }     
                                 _predictedStates.RemoveAt(0);
@@ -287,7 +313,7 @@ public class RodInputManager : NetworkBehaviour
         //Snap to position
         if (renderTick <= _serverSnapshots[0].Tick)
         {
-            _targetVisualPosition = _serverSnapshots[0].Position;
+            _targetVisualPosition = new Vector2(_serverSnapshots[0].DequantizedPosition, 0);
         }
         //Interpolate
         else if (_serverSnapshots.Count >= 2)
@@ -298,26 +324,26 @@ public class RodInputManager : NetworkBehaviour
 
             if (snapshotB.Item1 > snapshotA.Item1)
             {
-                float t = (float)((renderTick - snapshotA.Item1) / (snapshotB.Item1 - snapshotA.Item1));
+                float t = (float)(renderTick - snapshotA.Item1) / (snapshotB.Item1 - snapshotA.Item1);
                 t = Mathf.Clamp01(t);
-                Vector2 position = Vector2.Lerp(snapshotA.Item2.Position, snapshotB.Item2.Position, t);
+                Vector2 position = Vector2.Lerp(new Vector2(snapshotA.Item2.DequantizedPosition, 0), new Vector2(snapshotB.Item2.DequantizedPosition, 0), t);
                 _targetVisualPosition = position;
             }
             else
             {
-                _targetVisualPosition = snapshotA.Item2.Position;
+                _targetVisualPosition = new Vector2(snapshotA.Item2.DequantizedPosition, 0);
             }
         }
     }
 
     [ServerRpc(Delivery = RpcDelivery.Unreliable)]
-    private void SendRodSnapshotServerRpc(ClientRodSnapshot rodSnapshot)
+    private void SendRodSnapshotServerRpc(ClientInputSnapshot rodSnapshot)
     {
         if (!IsServer) return;
 
         if (rodSnapshot.Tick > _lastReceivedTick)
         {
-            _serverMoveValue = rodSnapshot.InputMoveValue;
+            _serverMoveValue = rodSnapshot.DequantizeInputMoveValue;
             _lastReceivedTick = rodSnapshot.Tick;
         }
     }
@@ -485,7 +511,7 @@ public class RodInputManager : NetworkBehaviour
         if (IsServer || !IsOwner) return;
         _currentClientTick = networkTick.TickID;
         float inputMoveValue = _clientMoveValue;
-        ClientRodSnapshot rodSnapshot = new ClientRodSnapshot(inputMoveValue, networkTick.TickID);
+        ClientInputSnapshot rodSnapshot = new ClientInputSnapshot(inputMoveValue, networkTick.TickID);
         SendRodSnapshotServerRpc(rodSnapshot);
         InputState inputState = new InputState(networkTick.TickID, inputMoveValue);
         _pendingInputs.Add(inputState);

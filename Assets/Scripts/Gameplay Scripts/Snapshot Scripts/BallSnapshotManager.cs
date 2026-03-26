@@ -5,22 +5,37 @@ using System;
 
 public struct BallSnapshot : INetworkSerializable
 {
+    public const float PositionScale = 1000f;
+    public const float VelocityScale = 100f;
+
+    public short PosX, PosY, VelX, VelY;
+
     public BallSnapshot(Vector2 pos, Vector2 vel, uint tick)
     {
-        Position = pos;
-        Velocity = vel;
+        PosX = Quantize(pos.x, PositionScale);
+        PosY = Quantize(pos.y, PositionScale);
+        VelX = Quantize(vel.x, VelocityScale);
+        VelY = Quantize(vel.y, VelocityScale);
         Tick = tick;
     }
 
-    public Vector2 Position;
-    public Vector2 Velocity;
+    public Vector2 Position => new Vector2(PosX / PositionScale, PosY / PositionScale);
+    public Vector2 Velocity => new Vector2(VelX / VelocityScale, VelY / VelocityScale);
     public uint Tick;
 
     public void NetworkSerialize<T>(BufferSerializer<T> serializer) where T : IReaderWriter
     {
-        serializer.SerializeValue(ref Position);
-        serializer.SerializeValue(ref Velocity);
+        serializer.SerializeValue(ref PosX);
+        serializer.SerializeValue(ref PosY);
+        serializer.SerializeValue(ref VelX);
+        serializer.SerializeValue(ref VelY);
         serializer.SerializeValue(ref Tick);
+    }
+
+    private static short Quantize(float value, float scale)
+    {
+        int scaledValue = Mathf.RoundToInt(value * scale);
+        return (short)Mathf.Clamp(scaledValue, short.MinValue, short.MaxValue);
     }
 }
 

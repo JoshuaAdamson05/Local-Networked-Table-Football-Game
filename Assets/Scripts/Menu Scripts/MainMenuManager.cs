@@ -12,6 +12,11 @@ public class MainMenuManager : MonoBehaviour
             NetworkManager.Singleton.Shutdown();
             Destroy(NetworkManager.Singleton.gameObject);
         }
+
+        if (PersistentLobbySessionManager.Instance != null)
+        {
+            Destroy(PersistentLobbySessionManager.Instance.gameObject);
+        }
     }
 
     public void GoToLobby()

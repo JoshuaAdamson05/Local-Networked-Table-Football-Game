@@ -6,18 +6,15 @@ using System.Net.Sockets;
 using System.Net;
 using System.Text;
 using System;
-using UnityEngine.SceneManagement;
 
-public class NetworkedLobbyManager : NetworkBehaviour
+public class NetworkedLobbyManager : MonoBehaviour
 {
-    private bool _hasClientChosenToLeave = false;
     private bool _isListening = false;
     [SerializeField] private ushort _gameLobbyPort = 7777;
     [SerializeField] private ushort _listenerPort = 6777;
     [SerializeField] private string _gameID = "TABLEFOOTBALL_LAN";
     [SerializeField] private string _discoveryMessageType = "FIND_LOBBY";
     [SerializeField] private byte _gameProtocolVersion = 2;  
-    [SerializeField] private GameObject _persistentDisconnectionManagerPrefab;
     public static NetworkedLobbyManager Instance;
     private UdpClient _udpClient;
     private Task _listenerLoop;
@@ -43,12 +40,8 @@ public class NetworkedLobbyManager : NetworkBehaviour
             return;
         }
 
-        NetworkManager.Singleton.OnClientDisconnectCallback += OnClientDisconnected;
-
         if (PersistentLobbySessionManager.Instance.IsHost)
         {
-            NetworkManager.Singleton.OnClientConnectedCallback += OnClientConnected;
-
             if (!_isListening && NetworkManager.Singleton.ConnectedClients.Count == 0)
             {
                 UnityTransport transport = NetworkManager.Singleton.GetComponent<UnityTransport>();
@@ -61,81 +54,15 @@ public class NetworkedLobbyManager : NetworkBehaviour
         }
     }
 
-    public override void OnNetworkDespawn()
+    private void OnDestroy()
     {
-        NetworkManager.Singleton.OnClientDisconnectCallback -= OnClientDisconnected;
-        if (IsServer)
+        if (PersistentLobbySessionManager.Instance.IsHost)
         { 
-            NetworkManager.Singleton.OnClientConnectedCallback -= OnClientConnected;
             StopListening();
         }
     }
 
-    private void OnClientConnected(ulong clientId)
-    {
-        if (IsServer)
-        {
-            if (clientId == NetworkManager.Singleton.LocalClientId)
-                return;
-
-            if (NetworkManager.Singleton.ConnectedClientsIds.Count > 2)
-            {
-                Debug.LogWarning("Maximum of 2 players reached. No more players can connect!");
-                NetworkManager.Singleton.DisconnectClient(clientId, "Maximum number of players reached!");
-                return;
-            }
-
-            StopListening();
-
-            _hasClientChosenToLeave = false;
-        }
-    }
-
-    private void OnClientDisconnected(ulong clientId)
-    {
-        if (IsServer)
-        {
-            if (clientId == NetworkManager.Singleton.LocalClientId) return;   
-            StartListening();
-        }
-        else if (!_hasClientChosenToLeave)
-        {
-            if (clientId != NetworkManager.Singleton.LocalClientId) return; 
-            if (_persistentDisconnectionManagerPrefab != null)
-                Instantiate(_persistentDisconnectionManagerPrefab);
-            else Debug.LogError("Persistent disconnection manager prefab is missing!");
-            if (PersistentDisconnectionManager.Instance != null)
-                PersistentDisconnectionManager.Instance.SetDisconnectionReason(NetworkManager.Singleton.DisconnectReason);  
-            if (PersistentLobbySessionManager.Instance != null)
-                    Destroy(PersistentLobbySessionManager.Instance.gameObject);
-            SceneManager.LoadScene("DisconnectedScene");
-        }
-    }
-
-    public void ExitGameLobby()
-    {
-        if (IsServer)
-        {
-            if (NetworkManager.Singleton != null)
-            {
-                if (NetworkManager.Singleton.ConnectedClients.Count > 1)
-                {
-                    ulong clientId = NetworkManager.Singleton.ConnectedClientsIds[1];
-                    NetworkManager.Singleton.DisconnectClient(clientId, "The host has left the lobby!");
-                }
-            }
-        }
-        else _hasClientChosenToLeave = true;
-
-        if (PersistentLobbySessionManager.Instance != null)
-        {
-            Destroy(PersistentLobbySessionManager.Instance.gameObject);
-        }
-
-        SceneManager.LoadScene("MainMenuScene");
-    }
-
-    private void StopListening()
+    public void StopListening()
     {
         if (!_isListening) return;
         _isListening = false;
@@ -147,7 +74,7 @@ public class NetworkedLobbyManager : NetworkBehaviour
         }
     }
 
-    private void StartListening()
+    public void StartListening()
     {
         if (_isListening) return;
         _udpClient = new UdpClient(_listenerPort);

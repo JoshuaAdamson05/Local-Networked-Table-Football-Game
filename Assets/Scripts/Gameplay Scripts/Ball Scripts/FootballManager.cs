@@ -1,13 +1,12 @@
 using UnityEngine;
 using Unity.Netcode;
-using NUnit.Framework;
-using System.Collections.Generic;
 
 public class FootballManager : NetworkBehaviour
 {
     [SerializeField] private Rigidbody2D _footballRb;
-    [SerializeField] private CircleCollider2D _footballCollider;
+    [SerializeField] private CircleCollider2D _footballBounds;
     [SerializeField] private float _footballSpeed;
+    [SerializeField] private bool _isCollisionsWithRodsEnabled = true;
     private BoxCollider2D _pitchBounds;
     private Vector2 _lastVelocity;
     private Vector2 _lastPosition;
@@ -22,6 +21,15 @@ public class FootballManager : NetworkBehaviour
         if (IsServer)
         {
             Debug.Log("FootballManager spawned on the server.");
+
+            if (!_isCollisionsWithRodsEnabled)
+            {
+                CircleCollider2D footballCollider = _footballRb.GetComponent<CircleCollider2D>();
+                if (footballCollider != null)
+                {
+                    footballCollider.enabled = false;
+                }
+            }
         }
         else
         {
@@ -40,7 +48,7 @@ public class FootballManager : NetworkBehaviour
             Debug.Log("Pitchbounds could not be found!");
         }
 
-        if (_footballCollider == null)
+        if (_footballBounds == null)
         {
             Debug.Log("Football collider not added!");
         }
@@ -49,7 +57,7 @@ public class FootballManager : NetworkBehaviour
     private void FixedUpdate()
     {
         if (!IsServer) return;
-        if (_footballRb == null || _pitchBounds == null || _footballCollider == null) return;
+        if (_footballRb == null || _pitchBounds == null || _footballBounds == null) return;
 
         if (_footballRb.linearVelocity.sqrMagnitude > 0.0001f)
         {
@@ -87,8 +95,8 @@ public class FootballManager : NetworkBehaviour
 
     private void ReflectBallAtPitchBounds()
     {
-        float minX = _pitchBounds.bounds.min.x + _footballCollider.bounds.extents.x;
-        float maxX = _pitchBounds.bounds.max.x - _footballCollider.bounds.extents.x;
+        float minX = _pitchBounds.bounds.min.x + _footballBounds.bounds.extents.x;
+        float maxX = _pitchBounds.bounds.max.x - _footballBounds.bounds.extents.x;
 
         //Left Bound
         if (_footballRb.position.x < minX && _footballRb.linearVelocity.x < 0f)

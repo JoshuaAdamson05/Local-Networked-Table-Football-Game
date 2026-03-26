@@ -1242,7 +1242,7 @@ GameObject:
   - component: {fileID: 1084445161}
   m_Layer: 5
   m_Name: Exit_Button
-  m_TagString: Untagged
+  m_TagString: ExitConnectionButton
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
@@ -1310,19 +1310,7 @@ MonoBehaviour:
   m_TargetGraphic: {fileID: 1084445162}
   m_OnClick:
     m_PersistentCalls:
-      m_Calls:
-      - m_Target: {fileID: 1339608951}
-        m_TargetAssemblyTypeName: NetworkedLobbyManager, Assembly-CSharp
-        m_MethodName: ExitGameLobby
-        m_Mode: 1
-        m_Arguments:
-          m_ObjectArgument: {fileID: 0}
-          m_ObjectArgumentAssemblyTypeName: UnityEngine.Object, UnityEngine
-          m_IntArgument: 0
-          m_FloatArgument: 0
-          m_StringArgument: 
-          m_BoolArgument: 0
-        m_CallState: 2
+      m_Calls: []
 --- !u!114 &1084445162
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -2238,7 +2226,6 @@ MonoBehaviour:
   _gameID: TABLEFOOTBALL_LAN
   _discoveryMessageType: FIND_LOBBY
   _gameProtocolVersion: 2
-  _persistentDisconnectionManagerPrefab: {fileID: 6077429105104249279, guid: 5c14511b331693040a67124089fd4a1f, type: 3}
 --- !u!4 &1339608952
 Transform:
   m_ObjectHideFlags: 0
@@ -2989,6 +2976,50 @@ CanvasRenderer:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 1726143130}
   m_CullTransparentMesh: 1
+--- !u!1 &1939875183
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 1939875185}
+  - component: {fileID: 1939875184}
+  m_Layer: 0
+  m_Name: ExitSceneManager
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!114 &1939875184
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1939875183}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 81de86b5510d01b4592ad9373e698eff, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::ExitSceneManager
+--- !u!4 &1939875185
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1939875183}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &2063666493
 GameObject:
   m_ObjectHideFlags: 0
@@ -3217,3 +3248,4 @@ SceneRoots:
   - {fileID: 1490563900}
   - {fileID: 677157782}
   - {fileID: 677253429}
+  - {fileID: 1939875185}

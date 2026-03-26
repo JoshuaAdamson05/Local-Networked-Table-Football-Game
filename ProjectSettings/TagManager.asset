@@ -13,6 +13,7 @@ TagManager:
   - EnterLobbyName
   - ClientNameText
   - ClientReadyStatusText
+  - ExitConnectionButton
   layers:
   - Default
   - TransparentFX

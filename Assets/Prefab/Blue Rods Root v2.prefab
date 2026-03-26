@@ -137,7 +137,8 @@ MonoBehaviour:
   _moveSpeed: 1.25
   _visualRodGameObject: {fileID: 1337263301144420556}
   _colliderRodGameObject: {fileID: 3295738668004817286}
-  _authoritativeMode: 1
+  _authoritativeMode:
+    m_InternalValue: 1
   _bufferWindowSeconds: 0.5
   _interpolationDelayMs: 100
   _maxCorrectionDistance: 0.125
@@ -257,6 +258,10 @@ PrefabInstance:
       propertyPath: m_IsActive
       value: 1
       objectReference: {fileID: 0}
+    - target: {fileID: 7589419457470823646, guid: f495233d09c6cda4e963ac5c503473f1, type: 3}
+      propertyPath: m_TagString
+      value: Untagged
+      objectReference: {fileID: 0}
     - target: {fileID: 8478280046009475962, guid: f495233d09c6cda4e963ac5c503473f1, type: 3}
       propertyPath: m_LocalPosition.x
       value: 1
@@ -369,6 +374,10 @@ PrefabInstance:
     - target: {fileID: 7589419457470823646, guid: f495233d09c6cda4e963ac5c503473f1, type: 3}
       propertyPath: m_IsActive
       value: 1
+      objectReference: {fileID: 0}
+    - target: {fileID: 7589419457470823646, guid: f495233d09c6cda4e963ac5c503473f1, type: 3}
+      propertyPath: m_TagString
+      value: Untagged
       objectReference: {fileID: 0}
     - target: {fileID: 8478280046009475962, guid: f495233d09c6cda4e963ac5c503473f1, type: 3}
       propertyPath: m_LocalPosition.x

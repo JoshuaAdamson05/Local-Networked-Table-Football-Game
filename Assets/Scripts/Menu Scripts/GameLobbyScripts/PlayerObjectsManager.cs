@@ -80,6 +80,8 @@ public class PlayerObjectsManager : NetworkBehaviour
     [ClientRpc]
     private void SendHostNameClientRpc(string hostName)
     {
+        if (IsServer) return;
+
         if (PersistentLobbySessionManager.Instance != null)
         {
             PersistentLobbySessionManager.Instance.SetConnectedPlayerName(hostName);
@@ -124,7 +126,7 @@ public class PlayerObjectsManager : NetworkBehaviour
 
         if (_clientObjectNameText != null)
         {
-            _clientObjectNameText.text = playerName;
+            _clientObjectNameText.text = PersistentLobbySessionManager.Instance.ConnectedPlayerName;
         }
         else
             Debug.LogWarning("Client object name text missing");
