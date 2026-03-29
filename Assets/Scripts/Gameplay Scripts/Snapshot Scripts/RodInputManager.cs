@@ -229,8 +229,12 @@ public class RodInputManager : NetworkBehaviour
 
     void Update()
     {
-        if (MatchStateManager.Instance == null) return;   
-        if (MatchStateManager.Instance.CurrentMatchState.Value != MatchState.InPlay) return;
+        if (MatchStateManager.Instance == null) return;
+        if (MatchStateManager.Instance.CurrentMatchState.Value != MatchState.InPlay)
+        {
+            _clientMoveValue = 0f;
+            return;
+        }
         if (IsOwner)
             _clientMoveValue = MatchStateManager.Instance.CurrentMatchState.Value == MatchState.InPlay ? _moveAction.ReadValue<float>() : 0f;
 
@@ -265,10 +269,19 @@ public class RodInputManager : NetworkBehaviour
                             {
                                 PredictedState predictedState = _predictedStates[0];
 
-                                float errorDistance = Vector2.Distance(predictedState.Position, new Vector2(snapshot.DequantizedPosition, 0));
+                                float errorDistance = Mathf.Abs(predictedState.Position.x - snapshot.DequantizedPosition);
+                                if (NetworkMetricsLogger.Instance != null && NetworkMetricsLogger.Instance.IsLogging)
+                                {
+                                    NetworkMetricsLogger.Instance.ClientRodMetricData.RecordError(errorDistance);
+                                }
 
                                 if (errorDistance >= _maxCorrectionDistance)
                                 {
+                                    if (NetworkMetricsLogger.Instance != null && NetworkMetricsLogger.Instance.IsLogging)
+                                    {
+                                        NetworkMetricsLogger.Instance.ClientRodMetricData.RecordSnap();
+                                    }
+
                                     _targetPhysicsPosition = new Vector2(snapshot.DequantizedPosition, 0);
                                     _shouldCorrectClientPosition = true;
                                 }     
@@ -368,6 +381,15 @@ public class RodInputManager : NetworkBehaviour
         if (_authoritativeMode.Value == RodAuthorityMode.ClientAuthoritative)
             if (rodSnapshot.ServerTick > _lastReceivedClientRodTick && rodSnapshot.ResetId == _resetId)
             {
+                if (NetworkMetricsLogger.Instance != null && NetworkMetricsLogger.Instance.IsLogging)
+                {
+                    if (_lastReceivedClientRodTick != 0)
+                    {
+                        uint gap = rodSnapshot.ServerTick - _lastReceivedClientRodTick;
+                        NetworkMetricsLogger.Instance.ClientRodMetricData.RecordSnapshotGap(gap);
+                    }
+                }
+
                 _reconciliationSnapshots.Add(rodSnapshot);
                 _lastReceivedClientRodTick = rodSnapshot.ServerTick;
             }

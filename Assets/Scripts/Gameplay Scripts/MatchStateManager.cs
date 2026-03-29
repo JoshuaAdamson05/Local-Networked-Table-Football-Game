@@ -186,7 +186,7 @@ public class MatchStateManager : NetworkBehaviour
                 RegisterKickOffSetUp();
                 break;
             case MatchState.GameOver:
-                CurrentMatchState.Value = MatchState.ConnectingToLobby;
+                CurrentMatchState.Value = MatchState.ConnectingToLobby;              
                 if (NetworkManager.Singleton != null)
                 {
                     Debug.Log("Switching Scenes!");

@@ -119,6 +119,15 @@ public class BallSnapshotManager : NetworkBehaviour
         if (IsServer) return;
         if (ballSnapshot.Tick > _lastReceivedTick)
         {
+            if (NetworkMetricsLogger.Instance != null)
+            {
+                if (_lastReceivedTick != 0)
+                {
+                    uint gap = ballSnapshot.Tick - _lastReceivedTick;
+                    NetworkMetricsLogger.Instance.BallMetricData.RecordSnapshotGap(gap);
+                }
+            }
+
             _clientBallSnapshots.Add(ballSnapshot);
             _lastReceivedTick = ballSnapshot.Tick;
         }    
@@ -138,9 +147,20 @@ public class BallSnapshotManager : NetworkBehaviour
         CleanSnapshots();
         if (_clientBallSnapshots.Count == 0) return;
 
+        if (NetworkMetricsLogger.Instance != null && NetworkMetricsLogger.Instance.IsLogging)
+        {
+            bool isExtrapolating = renderTick >= _clientBallSnapshots[^1].Tick;
+            NetworkMetricsLogger.Instance.BallMetricData.RecordTickSample(isExtrapolating);
+        }
+
         //Snap to position
         if (renderTick <= _clientBallSnapshots[0].Tick)
         {
+            if (NetworkMetricsLogger.Instance != null && NetworkMetricsLogger.Instance.IsLogging)
+            {
+                NetworkMetricsLogger.Instance.BallMetricData.RecordSnap();
+            }
+
             _targetPosition = _clientBallSnapshots[0].Position;
         }
         //Extrapolate
@@ -175,10 +195,10 @@ public class BallSnapshotManager : NetworkBehaviour
 
         Vector2 currentPosition = _football.transform.position;
         float errorDistance = Vector2.Distance(currentPosition, _targetPosition);
-        if (errorDistance >= _maxSnapDistance)
+
+        if (NetworkMetricsLogger.Instance != null && NetworkMetricsLogger.Instance.IsLogging)
         {
-            _football.transform.position = _targetPosition;
-            return;
+            NetworkMetricsLogger.Instance.BallMetricData.RecordError(errorDistance);
         }
 
         _football.transform.position = _targetPosition;
@@ -222,27 +242,4 @@ public class BallSnapshotManager : NetworkBehaviour
             index = 1;
         snapshotA = (_clientBallSnapshots[index - 1].Tick, _clientBallSnapshots[index - 1]);
     }
-
-    //private void Update()
-    //{
-    //    if (!IsServer && IsClient)
-    //    {
-    //        if (_football == null) return;
-    //        while (_clientBallSnapshots.Count > 0)
-    //        {
-    //            BallSnapshot ballSnapshot = _clientBallSnapshots.Peek();
-    //            if (ballSnapshot.Tick <= _lastProcessedTick)
-    //            {
-    //                _clientBallSnapshots.Dequeue();
-    //            }
-    //            else
-    //            {
-    //                ballSnapshot = _clientBallSnapshots.Dequeue();
-    //                _football.transform.position = ballSnapshot.Position;
-    //                _lastProcessedTick = ballSnapshot.Tick;
-    //                Debug.Log("Update ball position");
-    //            }
-    //        }
-    //    }
-    //}
 }
