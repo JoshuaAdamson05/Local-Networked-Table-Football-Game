@@ -115,7 +115,7 @@ public class RodInputManager : NetworkBehaviour
     private uint _lastReceivedTick;
     private uint _lastProcessedTick;
     private uint _currentClientTick;
-    private uint _lastReceivedHostRodTick;
+    private uint _lastReceivedAuthoritativeRodTick;
     private uint _lastReceivedClientRodTick;
     private List<ServerAuthoritativeRodSnapshot> _serverSnapshots;
     private List<ClientAuthoritativeRodSnapshot> _reconciliationSnapshots;
@@ -245,7 +245,11 @@ public class RodInputManager : NetworkBehaviour
                 if (IsOwner)
                     SubmitMoveRequestServerRpc(_clientMoveValue);
 
-                ClientRodInterpolation();
+                ClientRodInterpolation(shouldRecordMetrics: IsOwner);
+                if (IsOwner && NetworkMetricsLogger.Instance != null && NetworkMetricsLogger.Instance.IsLogging)
+                {
+                    NetworkMetricsLogger.Instance.ClientRodMetricData.RecordError(Mathf.Abs(_visualRodGameObject.transform.position.x - _targetVisualPosition.x));
+                }
             }
             else
             {
@@ -311,7 +315,7 @@ public class RodInputManager : NetworkBehaviour
         }
     }
 
-    private void ClientRodInterpolation()
+    private void ClientRodInterpolation(bool shouldRecordMetrics = false)
     {
         if (NetworkTickManager.Instance == null) return;
 
@@ -322,6 +326,10 @@ public class RodInputManager : NetworkBehaviour
         double renderTick = predictedServerTick - _delayTicks;
         if (predictedServerTick <= _serverSnapshots[0].Tick)
             renderTick = 0;
+
+        Vector2 currentVisualPosition = Vector2.negativeInfinity;
+        if (shouldRecordMetrics && NetworkMetricsLogger.Instance != null && NetworkMetricsLogger.Instance.IsLogging)
+            currentVisualPosition = _targetVisualPosition;
 
         //Snap to position
         if (renderTick <= _serverSnapshots[0].Tick)
@@ -347,10 +355,16 @@ public class RodInputManager : NetworkBehaviour
                 _targetVisualPosition = new Vector2(snapshotA.Item2.DequantizedPosition, 0);
             }
         }
+
+        if (shouldRecordMetrics && NetworkMetricsLogger.Instance != null && NetworkMetricsLogger.Instance.IsLogging)
+            if (Vector2.Distance(currentVisualPosition, _targetVisualPosition) >= _maxCorrectionDistance)
+            {
+                NetworkMetricsLogger.Instance.ClientRodMetricData.RecordSnap();
+            }
     }
 
     [ServerRpc(Delivery = RpcDelivery.Unreliable)]
-    private void SendRodSnapshotServerRpc(ClientInputSnapshot rodSnapshot)
+    private void SendClientInputSnapshotServerRpc(ClientInputSnapshot rodSnapshot)
     {
         if (!IsServer) return;
 
@@ -366,10 +380,19 @@ public class RodInputManager : NetworkBehaviour
     {
         if (IsServer) return;
 
-        if (rodSnapshot.Tick > _lastReceivedHostRodTick && rodSnapshot.ResetId == _resetId)
+        if (rodSnapshot.Tick > _lastReceivedAuthoritativeRodTick && rodSnapshot.ResetId == _resetId)
         {
+            if (IsOwner && NetworkMetricsLogger.Instance != null && NetworkMetricsLogger.Instance.IsLogging)
+            {
+                if (_lastReceivedAuthoritativeRodTick != 0)
+                {
+                    uint gap = rodSnapshot.Tick - _lastReceivedAuthoritativeRodTick;
+                    NetworkMetricsLogger.Instance.ClientRodMetricData.RecordSnapshotGap(gap);
+                }
+            }
+
             _serverSnapshots.Add(rodSnapshot);
-            _lastReceivedHostRodTick = rodSnapshot.Tick;
+            _lastReceivedAuthoritativeRodTick = rodSnapshot.Tick;
         }
     }
 
@@ -534,7 +557,7 @@ public class RodInputManager : NetworkBehaviour
         _currentClientTick = networkTick.TickID;
         float inputMoveValue = _clientMoveValue;
         ClientInputSnapshot rodSnapshot = new ClientInputSnapshot(inputMoveValue, networkTick.TickID);
-        SendRodSnapshotServerRpc(rodSnapshot);
+        SendClientInputSnapshotServerRpc(rodSnapshot);
         InputState inputState = new InputState(networkTick.TickID, inputMoveValue);
         _pendingInputs.Add(inputState);
     }
@@ -603,7 +626,7 @@ public class RodInputManager : NetworkBehaviour
         _currentClientTick = 0;
         _lastProcessedTick = 0;
         _lastReceivedClientRodTick = 0;
-        _lastReceivedHostRodTick = 0;
+        _lastReceivedAuthoritativeRodTick = 0;
         _resetId = resetId;
     }
 
@@ -630,7 +653,7 @@ public class RodInputManager : NetworkBehaviour
         _currentClientTick = 0;
         _lastProcessedTick = 0;
         _lastReceivedClientRodTick = 0;
-        _lastReceivedHostRodTick = 0;
+        _lastReceivedAuthoritativeRodTick = 0;
 
         ResetRodClientRpc(_resetId);
     }

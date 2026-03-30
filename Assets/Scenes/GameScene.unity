@@ -5214,7 +5214,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::TimeManager
   ShowTopMostFoldoutHeaderGroup: 1
-  _matchDuration: 180
+  _matchDuration: 90
 --- !u!4 &1763679083
 Transform:
   m_ObjectHideFlags: 0

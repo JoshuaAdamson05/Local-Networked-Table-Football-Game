@@ -89,8 +89,7 @@ public class PersistentLobbySessionManager : NetworkBehaviour
 
     public void SetLobbyIP()
     {
-        //LobbyIP = GetLocalIPAddress();
-        LobbyIP = "192.168.1.120";
+        LobbyIP = GetLocalIPAddress();
     }
 
     public void SetLobbyIP(string ip)
