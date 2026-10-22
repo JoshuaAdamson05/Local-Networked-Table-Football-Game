@@ -240,7 +240,11 @@ To access it in the Unity editor:
 
 From there, a clone of the project can be created and opened alongside the original project for local multiplayer testing.
 
-The source under `Assets/ParrelSync/` is third-party tooling and was not authored as part of this project.
+The source under `Assets/ParrelSync/` is third-party tooling and was not authored as part of this project. Its original copyright and MIT licence notice are preserved in [`Assets/ParrelSync/LICENSE.md`](Assets/ParrelSync/LICENSE.md). This licence applies to ParrelSync, not to the original game code in `Assets/Scripts/`.
+
+## Asset Attribution
+
+- **Football sprite (`Assets/football.png`)** — believed to be sourced from [“Football, Ball, Sport” on Pixabay](https://pixabay.com/vectors/football-ball-sport-soccer-round-157930/) by **OpenClipart-Vectors**. The listing was published on 18 October 2013 and is covered by **Creative Commons Zero (CC0)** under [Pixabay's terms](https://pixabay.com/service/terms/). Attribution is included for transparency, although CC0 does not require it.
 
 ## Repository Structure
 
